@@ -225,6 +225,7 @@
   const GOAL_MIN = 14, GOAL_MAX = 40;
   const TOLERANCE = 2;                // binnen +/- 2 slagen = op tempo
   const IDLE_AFTER_MS = 6000;         // geen nieuwe slag binnen 6 s = stilstand
+  const NEW_SESSION_AFTER_MS = 10 * 60 * 1000;   // na 10 minuten zonder slag begint een nieuwe training (zo lang wacht ook de slaapstand van de ESP32)
 
   const store = {
     get(k, d) { try { const v = localStorage.getItem('roeitempo.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -312,12 +313,17 @@
     const now = performance.now();
     if (strokes != null) {
       // Een nieuwe slag herken je aan een hoger slagenaantal, niet aan elk bericht
-      if (s.strokes !== null && strokes !== s.strokes) { s.lastStrokeAt = now; s.sess.strokes += Math.max(1, Math.min(5, strokes - s.strokes)); }
+      if (s.strokes !== null && strokes !== s.strokes) {
+        // Lang niet geroeid: vorige training vanzelf afronden en bewaren (gewone klok, die loopt ook door als de iPad slaapt)
+        if (s.lastStrokeWall && Date.now() - s.lastStrokeWall > NEW_SESSION_AFTER_MS) autoFinish();
+        s.lastStrokeAt = now; s.lastStrokeWall = Date.now();
+        s.sess.strokes += Math.max(1, Math.min(5, strokes - s.strokes));
+      }
       s.strokes = strokes;
     }
     if (spm != null) s.spm = spm;
     if (distance != null) {
-      if (s.distanceOffset === null) s.distanceOffset = distance; // begin bij nul, ook als de ESP32 al telde
+      if (s.distanceOffset === null) { s.distanceOffset = distance; s.distance = distance; } // begin bij nul, ook als de ESP32 al telde
       if (distance < s.distance - 1) { s.carry += Math.max(0, s.distance - s.distanceOffset); s.distanceOffset = 0; }   // ESP32 opnieuw gestart (bv. na de slaapstand): doortellen
       s.distance = distance;
     }
@@ -896,6 +902,15 @@ function drawRower(g, x, y, w, h, ph) {
         <p>Deze lijst staat alleen op deze iPad, in deze browser.</p>
         <div class="btns"><button type="button" class="btn" data-act="training">Terug</button><button type="button" class="btn primary" data-act="sheetclose">Sluiten</button></div>`;
     }
+  }
+
+  function autoFinish() {
+    const t = summary(), saved = t.meters >= 10 || t.sec >= 30;
+    if (saved) history.add(t);
+    s.prog = null;
+    resetSession(true);
+    s.distanceOffset = null;   // nieuwe nulmeting bij de volgende afstand
+    hint(saved ? 'Je vorige training is bewaard bij Eerdere trainingen. Deze begint weer bij 0.' : 'Nieuwe training: alles begint weer bij 0.');
   }
 
   function finish() {
