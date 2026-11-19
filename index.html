@@ -584,23 +584,42 @@
     vid.addEventListener('leavepictureinpicture', setButtons);
     vid.addEventListener('webkitpresentationmodechanged', setButtons);
 
+    let pending = false;
+    const info = () => `(technisch: rs=${vid.readyState} b=${vid.videoWidth} p=${vid.paused ? 1 : 0} api=${vid.webkitSetPresentationMode ? 'wk' : ''}${vid.requestPictureInPicture ? 'std' : ''})`;
+
+    function checkLater() {
+      setTimeout(() => {
+        pending = false;
+        setButtons();
+        if (!isOn()) hint('De zwevende balk kwam niet op gang ' + info());
+      }, 2500);
+    }
+
     function toggle() {
       if (!setup()) { hint('Deze browser kan geen zwevende balk maken.'); return; }
+      if (pending) { hint('De zwevende balk wordt nog gestart, even geduld.'); return; }
       try {
         if (isOn()) {
-          if (document.exitPictureInPicture && document.pictureInPictureElement) document.exitPictureInPicture();
-          else if (vid.webkitSetPresentationMode) vid.webkitSetPresentationMode('inline');
+          if (vid.webkitSetPresentationMode) vid.webkitSetPresentationMode('inline');
+          else if (document.exitPictureInPicture) document.exitPictureInPicture();
           return;
         }
-        vid.play().catch(() => {});
-        if (vid.requestPictureInPicture) {
-          vid.requestPictureInPicture().then(setButtons).catch(e => hint('Zwevende balk lukte niet: ' + (e && e.message ? e.message : 'onbekende fout')));
-        } else if (vid.webkitSupportsPresentationMode && vid.webkitSupportsPresentationMode('picture-in-picture')) {
+        if (vid.paused) vid.play().catch(() => {});
+        if (vid.readyState < 1) { hint('De balk is nog niet klaar. Probeer het over een paar tellen opnieuw ' + info()); return; }
+        pending = true;
+        // Op iPad/iPhone eerst de eigen manier van Apple; die blijft niet hangen
+        if (vid.webkitSupportsPresentationMode && vid.webkitSupportsPresentationMode('picture-in-picture')) {
           vid.webkitSetPresentationMode('picture-in-picture');
+          checkLater();
+        } else if (vid.requestPictureInPicture) {
+          vid.requestPictureInPicture()
+            .then(() => { pending = false; setButtons(); })
+            .catch(e => { pending = false; hint('Zwevende balk lukte niet: ' + (e && e.message ? e.message : 'onbekende fout') + ' ' + info()); });
         } else {
+          pending = false;
           hint('Deze browser kan geen zwevende balk maken.');
         }
-      } catch (e) { hint('Zwevende balk lukte niet: ' + e.message); }
+      } catch (e) { pending = false; hint('Zwevende balk lukte niet: ' + e.message + ' ' + info()); }
     }
 
     // Alvast klaarzetten, zodat de knop direct kan starten
@@ -629,7 +648,7 @@
     el.hint.textContent = text;
     el.hint.classList.add('show');
     clearTimeout(hintTimer);
-    hintTimer = setTimeout(() => el.hint.classList.remove('show'), 3200);
+    hintTimer = setTimeout(() => el.hint.classList.remove('show'), text.length > 70 ? 9000 : 3200);
   }
 
   setAudio(false);
