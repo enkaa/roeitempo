@@ -242,7 +242,7 @@
     spm: 0,
     lastStrokeAt: 0,
     strokes: null,      // slagenaantal van de roeier
-    distance: 0, distanceOffset: null,
+    distance: 0, distanceOffset: null, carry: 0,   // carry: meters van voor een herstart van de ESP32
     pace: 0,            // seconden per 500 m, 0 = onbekend
     elapsed: 0,         // ms actieve roeitijd
     lastClock: performance.now(),
@@ -274,13 +274,15 @@
     setText('spm', active ? String(Math.round(s.spm)) : '--');
     setText('state', st.text);
     setText('goal', String(s.goal));
-    setText('dist', Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL'));
+    setText('dist', meters().toLocaleString('nl-NL'));
     setText('time', fmtTime(s.elapsed / 1000));
     setText('pace', active && s.pace > 0 && s.pace < 600 ? fmtTime(s.pace) : '-:--');
     const pi = progInfo();
     setText('prog', pi ? `Blok ${pi.idx + 1} van ${pi.n}, nog ${fmtTime(pi.rem)}` + (pi.next ? `, daarna ${pi.next.spm}` : '') : '');
     pip.draw(st, active);
   }
+
+  const meters = () => Math.max(0, Math.floor(s.carry + s.distance - (s.distanceOffset || 0)));
 
   function fmtTime(sec) {
     sec = Math.max(0, Math.floor(sec));
@@ -316,7 +318,7 @@
     if (spm != null) s.spm = spm;
     if (distance != null) {
       if (s.distanceOffset === null) s.distanceOffset = distance; // begin bij nul, ook als de ESP32 al telde
-      if (distance < s.distanceOffset) s.distanceOffset = 0;       // ESP32 opnieuw gestart
+      if (distance < s.distance - 1) { s.carry += Math.max(0, s.distance - s.distanceOffset); s.distanceOffset = 0; }   // ESP32 opnieuw gestart (bv. na de slaapstand): doortellen
       s.distance = distance;
     }
     if (pace != null) s.pace = pace;
@@ -325,6 +327,7 @@
 
   function resetSession(quiet) {
     s.distanceOffset = s.distance;
+    s.carry = 0;
     s.elapsed = 0;
     newSess();
     if (s.prog) s.prog.start = 0;
@@ -529,6 +532,7 @@ function drawRower(g, x, y, w, h, ph) {
       stopDemo();
       s.source = 'ble';
       s.distanceOffset = null;
+      s.carry = 0;
       s.strokes = null;
       s.elapsed = 0;
       newSess();
@@ -642,7 +646,7 @@ function drawRower(g, x, y, w, h, ph) {
       g.fillText(t, BW - 14, 31);
       const tw = g.measureText(t).width;
       g.font = `650 15px ${FONT}`; g.fillStyle = '#f2f4f6';
-      g.fillText(Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL') + ' m', BW - 14 - tw - 8, 31);
+      g.fillText(meters().toLocaleString('nl-NL') + ' m', BW - 14 - tw - 8, 31);
       g.textAlign = 'left';
       g.setTransform(1, 0, 0, 1, 0, 0);
 
@@ -826,11 +830,11 @@ function drawRower(g, x, y, w, h, ph) {
   const history = { get: () => store.get('trainingen', []), add(t) { const h = this.get(); h.unshift(t); store.set('trainingen', h.slice(0, 200)); } };
 
   function summary() {
-    const ss = s.sess, meters = Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))), sec = s.elapsed / 1000;
+    const ss = s.sess, m = meters(), sec = s.elapsed / 1000;
     return {
-      date: ss.startedAt || new Date().toISOString(), meters, sec,
+      date: ss.startedAt || new Date().toISOString(), meters: m, sec,
       spm: ss.activeMs ? ss.spmMs / ss.activeMs : 0,
-      pace: meters > 0 ? sec / meters * 500 : 0,
+      pace: m > 0 ? sec / m * 500 : 0,
       onTarget: ss.activeMs ? Math.round(ss.onTargetMs / ss.activeMs * 100) : 0,
       strokes: ss.strokes, schema: s.prog ? s.prog.name : (picked !== 'vrij' ? presetById(picked).name : '')
     };
