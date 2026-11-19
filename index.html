@@ -547,55 +547,55 @@
     const HEX = { ok: '#30d158', slow: '#ff9f0a', fast: '#ff453a', idle: '#4a525c' };
     let ready = false, tickFlip = false;
 
+    // Korte aanwijzing in de zwevende balk
+    const CUE = { ok: 'Op tempo', slow: 'Sneller', fast: 'Rustiger' };
+
     function draw(st, active) {
       if (!g) return;
       lastArgs = [st, active];
       const col = HEX[st.key];
       g.fillStyle = '#111418'; g.fillRect(0, 0, W, H);
-
-      // Luidspreker
-      g.save(); g.translate(44, H / 2);
-      g.fillStyle = s.audioOn ? HEX.ok : '#7d8793';
-      g.beginPath(); g.moveTo(-14, -9); g.lineTo(-5, -9); g.lineTo(7, -20); g.lineTo(7, 20); g.lineTo(-5, 9); g.lineTo(-14, 9); g.closePath(); g.fill();
-      g.strokeStyle = g.fillStyle; g.lineWidth = 4.5; g.lineCap = 'round';
-      if (s.audioOn) { g.beginPath(); g.arc(9, 0, 11, -0.8, 0.8); g.stroke(); g.beginPath(); g.arc(9, 0, 20, -0.8, 0.8); g.stroke(); }
-      else { g.beginPath(); g.moveTo(16, -8); g.lineTo(30, 8); g.moveTo(30, -8); g.lineTo(16, 8); g.stroke(); }
-      g.restore();
-
-      // Balk met doelgebied
-      const bx = 100, bw = 220, by = H / 2 - 22, bh = 14;
-      const fx = v => bx + frac(v) * bw;
-      const rr = (x, y, w, h, r, c) => { g.fillStyle = c; g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); g.fill(); };
-      rr(bx, by, bw, bh, 7, '#23292f');
-      if (active) rr(bx, by, Math.max(bh, fx(s.spm) - bx), bh, 7, col);
-      rr(fx(s.goal - TOLERANCE), by - 13, fx(s.goal + TOLERANCE) - fx(s.goal - TOLERANCE), 5, 2.5, HEX.ok);
-      g.fillStyle = '#f2f4f6'; g.fillRect(fx(s.goal) - 1.5, by - 16, 3, bh + 32);
-
-      // Ritme-stip: snel naar rechts (haal), rustig terug (herstel); groen bij de inzet
-      const ph = beatPhase(), ry = H / 2 + 38, catchNow = ph < 0.1 || ph > 0.97;
-      rr(bx, ry - 2, bw, 4, 2, '#23292f');
-      g.fillStyle = catchNow ? HEX.ok : '#f2f4f6';
-      g.beginPath(); g.arc(bx + 9 + rhythmPos(ph) * (bw - 18), ry, catchNow ? 11 : 8, 0, Math.PI * 2); g.fill();
-
-      // 26 / 24 SPM
-      let x = 352;
       g.textBaseline = 'alphabetic';
-      g.font = `700 64px ${FONT}`; g.fillStyle = active ? col : '#7d8793';
-      const t1 = active ? String(Math.round(s.spm)) : '--';
-      g.fillText(t1, x, 112); x += g.measureText(t1).width + 10;
-      g.font = `600 44px ${FONT}`; g.fillStyle = '#7d8793'; g.fillText('/', x, 110); x += g.measureText('/').width + 10;
-      g.font = `700 64px ${FONT}`; g.fillStyle = '#f2f4f6'; g.fillText(String(s.goal), x, 112); x += g.measureText(String(s.goal)).width + 10;
-      g.font = `600 22px ${FONT}`; g.fillStyle = '#7d8793'; g.fillText('SPM', x, 110);
 
-      // Afstand en tijd rechts
+      // Links: tempo nu / doel, met een korte aanwijzing eronder
+      let x = 40;
+      g.font = `700 78px ${FONT}`; g.fillStyle = active ? col : '#5d6773';
+      const now = active ? String(Math.round(s.spm)) : '--';
+      g.fillText(now, x, 104); x += g.measureText(now).width + 8;
+      g.font = `600 42px ${FONT}`; g.fillStyle = '#c9ced4';
+      const goal = '/ ' + s.goal;
+      g.fillText(goal, x, 104); x += g.measureText(goal).width + 8;
+      g.font = `600 20px ${FONT}`; g.fillStyle = '#7d8793';
+      g.fillText('spm', x, 104);
+      g.font = `600 24px ${FONT}`; g.fillStyle = active ? col : '#7d8793';
+      g.fillText(active ? CUE[st.key] : st.text, 42, 146);
+
+      // Scheidingslijnen
+      g.fillStyle = '#23292f';
+      g.fillRect(292, 44, 2, 92);
+      g.fillRect(612, 44, 2, 92);
+
+      // Midden: ritme. Stip gaat snel naar rechts (haal) en rustig terug (herstel); bij de inzet een groene puls
+      const ph = beatPhase(), x0 = 340, x1 = 566, y = 90;
+      const rr = (rx, ry, w, h, r, c) => { g.fillStyle = c; g.beginPath(); g.roundRect ? g.roundRect(rx, ry, w, h, r) : g.rect(rx, ry, w, h); g.fill(); };
+      rr(x0, y - 3, x1 - x0, 6, 3, '#262c34');
+      if (ph < 0.22) {
+        const k = ph / 0.22;
+        g.strokeStyle = `rgba(48, 209, 88, ${(1 - k) * 0.9})`; g.lineWidth = 4;
+        g.beginPath(); g.arc(x0, y, 14 + k * 26, 0, Math.PI * 2); g.stroke();
+      }
+      const catchNow = ph < 0.08 || ph > 0.97;
+      g.fillStyle = catchNow ? HEX.ok : '#f2f4f6';
+      g.beginPath(); g.arc(x0 + rhythmPos(ph) * (x1 - x0), y, catchNow ? 13 : 10, 0, Math.PI * 2); g.fill();
+
+      // Rechts: afstand en tijd
       g.textAlign = 'right';
-      g.font = `650 36px ${FONT}`; g.fillStyle = '#f2f4f6';
-      g.fillText(Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL') + ' m', W - 30, 82);
-      g.font = `500 32px ${FONT}`; g.fillStyle = '#9aa3ad';
-      g.fillText(fmtTime(s.elapsed / 1000), W - 30, 128);
+      g.font = `650 42px ${FONT}`; g.fillStyle = '#f2f4f6';
+      g.fillText(Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL') + ' m', W - 40, 96);
+      g.font = `500 30px ${FONT}`; g.fillStyle = '#8a94a1';
+      g.fillText(fmtTime(s.elapsed / 1000), W - 40, 140);
       g.textAlign = 'left';
 
-      // Klein verschil per beeld, zodat de videostroom altijd nieuwe beelden krijgt
       tickFlip = !tickFlip; g.fillStyle = tickFlip ? '#111418' : '#121519'; g.fillRect(0, H - 1, 1, 1);
     }
 
