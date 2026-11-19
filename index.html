@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0d0f12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Roeitempo</title>
+<style>
+  :root {
+    --bg: #0d0f12;
+    --card: #161a1f;
+    --line: #262c34;
+    --text: #eef1f4;
+    --muted: #8a94a1;
+    --ok: #34c759;
+    --slow: #ff9f0a;
+    --fast: #ff453a;
+    --idle: #5d6773;
+    --state: var(--idle);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    -webkit-user-select: none; user-select: none; overflow: hidden; }
+  body { display: flex; }
+
+  .app { flex: 1; display: grid; gap: 2vmin; padding: 2.5vmin;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "top" "gauge" "target" "stats";
+    min-width: 0; min-height: 0; }
+
+  /* Breed en laag venster: meter links, de rest rechts */
+  @media (min-aspect-ratio: 7/5) {
+    .app { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      grid-template-areas: "top top" "gauge target" "gauge stats"; }
+    .target { align-self: end; }
+  }
+
+  /* Bovenbalk */
+  .top { grid-area: top; display: flex; align-items: center; gap: 1.5vmin; min-width: 0; }
+  .conn { flex: 1; min-width: 0; display: flex; align-items: center; gap: 1.6vmin;
+    background: none; border: 0; color: var(--muted); padding: 0; font: inherit;
+    font-size: clamp(11px, 4vmin, 16px); text-align: left; cursor: pointer; min-height: 32px; }
+  .conn .dot { width: 2.4vmin; height: 2.4vmin; min-width: 8px; min-height: 8px; border-radius: 50%; background: var(--idle); flex: none; }
+  .conn.on .dot { background: var(--ok); }
+  .conn.busy .dot { background: var(--slow); }
+  .conn .lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conn.cta { color: var(--text); }
+  .conn.cta .lbl { background: #2a6df4; color: #fff; padding: 1.2vmin 3vmin; border-radius: 999px; font-weight: 600; }
+  .icon { flex: none; width: clamp(32px, 11vmin, 48px); height: clamp(32px, 11vmin, 48px);
+    border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    display: grid; place-items: center; cursor: pointer; padding: 0; font: inherit; }
+  .icon svg { width: 52%; height: 52%; }
+  .icon.small { font-size: clamp(10px, 3.4vmin, 14px); font-weight: 600; width: auto; padding: 0 2.6vmin; border-radius: 999px; }
+  .icon.active { background: #1f3b26; border-color: #2f6b3b; color: var(--ok); }
+
+  /* Meter */
+  .gauge { grid-area: gauge; position: relative; min-height: 0; min-width: 0; }
+  .gauge svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+  .track { fill: none; stroke: var(--line); stroke-linecap: round; }
+  .zone { fill: none; stroke: var(--ok); stroke-linecap: round; opacity: .85; }
+  .fill { fill: none; stroke: var(--state); stroke-linecap: round; transition: stroke .3s; }
+  .tick { stroke: var(--text); stroke-linecap: round; }
+  .needle { fill: var(--state); stroke: var(--bg); transition: fill .3s; }
+  .spm { fill: var(--text); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .unit { fill: var(--muted); font-weight: 600; letter-spacing: .08em; }
+  .state { fill: var(--state); font-weight: 600; transition: fill .3s; }
+
+  /* Doel met - en + */
+  .target { grid-area: target; display: flex; align-items: center; justify-content: center; gap: 3vmin; }
+  .step { width: clamp(44px, 16vmin, 76px); height: clamp(44px, 16vmin, 76px); border-radius: 50%;
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+    font-size: clamp(22px, 8vmin, 36px); font-weight: 500; line-height: 1; cursor: pointer;
+    display: grid; place-items: center; padding: 0; }
+  .step:active, .icon:active { background: #222831; }
+  .goal { text-align: center; min-width: 22vmin; }
+  .goal .v { font-size: clamp(20px, 9vmin, 40px); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.05; }
+  .goal .k { font-size: clamp(10px, 3.2vmin, 13px); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+
+  /* Cijfers */
+  .stats { grid-area: stats; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5vmin; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 2.5vmin; padding: 1.6vmin 1vmin; text-align: center; min-width: 0; }
+  .stat .v { font-size: clamp(15px, 6.4vmin, 30px); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; white-space: nowrap; }
+  .stat .k { font-size: clamp(9px, 3vmin, 12px); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-top: .4vmin; }
+
+  .hint { position: fixed; left: 50%; bottom: 3vmin; transform: translateX(-50%); background: #2b3138; color: var(--text);
+    font-size: clamp(11px, 3.6vmin, 14px); padding: 1.6vmin 3vmin; border-radius: 2vmin; max-width: 92vw; text-align: center;
+    opacity: 0; pointer-events: none; transition: opacity .3s; }
+  .hint.show { opacity: 1; }
+</style>
+</head>
+<body>
+<main class="app">
+  <div class="top">
+    <button class="conn cta" id="conn" type="button"><span class="dot"></span><span class="lbl" id="connLbl">Verbinden</span></button>
+    <button class="icon small" id="demo" type="button" aria-pressed="false">Demo</button>
+    <button class="icon" id="reset" type="button" aria-label="Afstand en tijd op nul zetten">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+    </button>
+    <button class="icon" id="audio" type="button" aria-pressed="false" aria-label="Metronoom aan of uit">
+      <svg id="audioIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </button>
+  </div>
+
+  <div class="gauge">
+    <svg viewBox="0 -6 200 178" aria-hidden="true">
+      <path class="track" id="track" stroke-width="14"/>
+      <path class="fill" id="fill" stroke-width="14"/>
+      <path class="zone" id="zone" stroke-width="4"/>
+      <line class="tick" id="goalTick" stroke-width="3"/>
+      <circle class="needle" id="needle" r="9" stroke-width="3"/>
+      <text class="spm" id="spm" x="100" y="106" text-anchor="middle" font-size="56">--</text>
+      <text class="unit" x="100" y="126" text-anchor="middle" font-size="11">SLAGEN/MIN</text>
+      <text class="state" id="state" x="100" y="160" text-anchor="middle" font-size="15">Nog geen slagen</text>
+    </svg>
+  </div>
+
+  <div class="target">
+    <button class="step" id="minus" type="button" aria-label="Doeltempo lager">&minus;</button>
+    <div class="goal"><div class="v" id="goal">24</div><div class="k">Doel</div></div>
+    <button class="step" id="plus" type="button" aria-label="Doeltempo hoger">+</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="v" id="dist">0</div><div class="k">Meter</div></div>
+    <div class="stat"><div class="v" id="time">0:00</div><div class="k">Tijd</div></div>
+    <div class="stat"><div class="v" id="pace">-:--</div><div class="k">/500 m</div></div>
+  </div>
+</main>
+<div class="hint" id="hint"></div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Instellingen ----------
+  const SPM_MIN = 10, SPM_MAX = 40;   // bereik van de meter
+  const GOAL_MIN = 14, GOAL_MAX = 40;
+  const TOLERANCE = 2;                // binnen +/- 2 slagen = op tempo
+  const IDLE_AFTER_MS = 6000;         // geen nieuwe slag binnen 6 s = stilstand
+
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('roeitempo.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('roeitempo.' + k, JSON.stringify(v)); } catch (e) {} }
+  };
+
+  const $ = id => document.getElementById(id);
+  const el = {
+    conn: $('conn'), connLbl: $('connLbl'), demo: $('demo'), reset: $('reset'), audio: $('audio'), audioIcon: $('audioIcon'),
+    track: $('track'), zone: $('zone'), fill: $('fill'), goalTick: $('goalTick'), needle: $('needle'),
+    spm: $('spm'), state: $('state'), goal: $('goal'), minus: $('minus'), plus: $('plus'),
+    dist: $('dist'), time: $('time'), pace: $('pace'), hint: $('hint')
+  };
+
+  // ---------- Toestand ----------
+  const s = {
+    goal: Math.min(GOAL_MAX, Math.max(GOAL_MIN, store.get('goal', 24))),
+    spm: 0,
+    lastStrokeAt: 0,
+    strokes: null,      // slagenaantal van de roeier
+    distance: 0, distanceOffset: null,
+    pace: 0,            // seconden per 500 m, 0 = onbekend
+    elapsed: 0,         // ms actieve roeitijd
+    lastClock: performance.now(),
+    source: null,       // 'ble' | 'demo' | null
+    audioOn: false
+  };
+
+  // ---------- Meter tekenen ----------
+  const CX = 100, CY = 100, R = 84, A0 = 150, A1 = 390; // boog van 240 graden, onderkant open
+  const pt = (deg, r = R) => { const a = deg * Math.PI / 180; return [CX + r * Math.cos(a), CY + r * Math.sin(a)]; };
+  const angleFor = v => A0 + (Math.min(SPM_MAX, Math.max(SPM_MIN, v)) - SPM_MIN) / (SPM_MAX - SPM_MIN) * (A1 - A0);
+  const arc = (d0, d1, r = R) => {
+    if (d1 - d0 < 0.01) d1 = d0 + 0.01;
+    const [x0, y0] = pt(d0, r), [x1, y1] = pt(d1, r);
+    return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${d1 - d0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
+  };
+  el.track.setAttribute('d', arc(A0, A1));
+
+  function status() {
+    if (!s.source) return { key: 'idle', text: s.source === null ? 'Niet verbonden' : '' };
+    if (!s.spm || performance.now() - s.lastStrokeAt > IDLE_AFTER_MS) return { key: 'idle', text: 'Nog geen slagen' };
+    const diff = s.spm - s.goal;
+    if (Math.abs(diff) <= TOLERANCE) return { key: 'ok', text: 'Op tempo' };
+    return diff < 0 ? { key: 'slow', text: 'Te langzaam' } : { key: 'fast', text: 'Te snel' };
+  }
+
+  const COLORS = { ok: 'var(--ok)', slow: 'var(--slow)', fast: 'var(--fast)', idle: 'var(--idle)' };
+
+  function render() {
+    const st = status();
+    document.documentElement.style.setProperty('--state', COLORS[st.key]);
+    const active = st.key !== 'idle';
+    el.spm.textContent = active ? Math.round(s.spm) : '--';
+    el.state.textContent = st.text;
+    el.zone.setAttribute('d', arc(angleFor(s.goal - TOLERANCE), angleFor(s.goal + TOLERANCE), R + 13)); // doelgebied als groene rand
+    el.fill.setAttribute('d', active ? arc(A0, angleFor(s.spm)) : '');
+    const [nx, ny] = pt(angleFor(active ? s.spm : SPM_MIN));
+    el.needle.setAttribute('cx', nx.toFixed(2)); el.needle.setAttribute('cy', ny.toFixed(2));
+    el.needle.style.display = active ? '' : 'none';
+    const ga = angleFor(s.goal), [gx0, gy0] = pt(ga, R - 10), [gx1, gy1] = pt(ga, R + 17);
+    el.goalTick.setAttribute('x1', gx0); el.goalTick.setAttribute('y1', gy0);
+    el.goalTick.setAttribute('x2', gx1); el.goalTick.setAttribute('y2', gy1);
+    el.goal.textContent = s.goal;
+    el.dist.textContent = Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL');
+    el.time.textContent = fmtTime(s.elapsed / 1000);
+    el.pace.textContent = active && s.pace > 0 && s.pace < 600 ? fmtTime(s.pace) : '-:--';
+  }
+
+  function fmtTime(sec) {
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, ss = String(sec % 60).padStart(2, '0');
+    return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+  }
+
+  // Klok: telt alleen door zolang er geroeid wordt
+  function clock() {
+    const now = performance.now();
+    if (s.source && s.lastStrokeAt && now - s.lastStrokeAt < IDLE_AFTER_MS) s.elapsed += now - s.lastClock;
+    s.lastClock = now;
+    render();
+  }
+  setInterval(clock, 250);
+
+  // Nieuwe meetwaarden (van de roeier of de demo)
+  function onData({ spm, strokes, distance, pace }) {
+    const now = performance.now();
+    if (strokes != null) {
+      // Een nieuwe slag herken je aan een hoger slagenaantal, niet aan elk bericht
+      if (s.strokes !== null && strokes !== s.strokes) s.lastStrokeAt = now;
+      s.strokes = strokes;
+    }
+    if (spm != null) s.spm = spm;
+    if (distance != null) {
+      if (s.distanceOffset === null) s.distanceOffset = distance; // begin bij nul, ook als de ESP32 al telde
+      if (distance < s.distanceOffset) s.distanceOffset = 0;       // ESP32 opnieuw gestart
+      s.distance = distance;
+    }
+    if (pace != null) s.pace = pace;
+    render();
+  }
+
+  function resetSession() {
+    s.distanceOffset = s.distance;
+    s.elapsed = 0;
+    if (s.source === 'demo') demo.reset();
+    render();
+    hint('Afstand en tijd staan weer op nul.');
+  }
+
+  // ---------- Doel ----------
+  function setGoal(v) {
+    s.goal = Math.min(GOAL_MAX, Math.max(GOAL_MIN, v));
+    store.set('goal', s.goal);
+    metro.retime();
+    render();
+  }
+  el.minus.addEventListener('click', () => setGoal(s.goal - 1));
+  el.plus.addEventListener('click', () => setGoal(s.goal + 1));
+  el.reset.addEventListener('click', resetSession);
+
+  // ---------- Metronoom (Web Audio) ----------
+  const metro = (() => {
+    let ctx = null, timer = null, nextAt = 0;
+    const LOOKAHEAD = 0.12;
+
+    function ensure() {
+      // Probeer naast andere geluiden (film) te spelen in plaats van ze te pauzeren
+      try { if (navigator.audioSession) navigator.audioSession.type = 'ambient'; } catch (e) {}
+      if (!ctx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return false;
+        ctx = new AC();
+      }
+      if (ctx.state !== 'running') ctx.resume();
+      return true;
+    }
+
+    function click(t, off) {
+      // Zachte tik; buiten het doel een lagere, iets doffere tik
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = off ? 'triangle' : 'sine';
+      o.frequency.setValueAtTime(off ? 520 : 1046, t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(off ? 0.22 : 0.28, t + 0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + (off ? 0.12 : 0.07));
+      o.connect(g).connect(ctx.destination);
+      o.start(t); o.stop(t + 0.15);
+    }
+
+    function loop() {
+      if (!ctx) return;
+      const interval = 60 / s.goal;
+      while (nextAt < ctx.currentTime + LOOKAHEAD) {
+        if (nextAt < ctx.currentTime) nextAt = ctx.currentTime + 0.02;
+        const st = status().key;
+        click(nextAt, st === 'slow' || st === 'fast');
+        nextAt += interval;
+      }
+    }
+
+    return {
+      start() {
+        if (!ensure()) return false;
+        nextAt = ctx.currentTime + 0.05;
+        clearInterval(timer); timer = setInterval(loop, 25); loop();
+        return true;
+      },
+      stop() { clearInterval(timer); timer = null; },
+      retime() { if (timer && ctx) nextAt = Math.min(nextAt, ctx.currentTime + 60 / s.goal); }
+    };
+  })();
+
+  const ICON_ON = '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 8.5a5 5 0 0 1 0 7"/><path d="M19 6a8.5 8.5 0 0 1 0 12"/>';
+  const ICON_OFF = '<path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M17 9l5 6"/><path d="M22 9l-5 6"/>';
+  function setAudio(on) {
+    s.audioOn = on && metro.start();
+    if (!s.audioOn) metro.stop();
+    el.audio.classList.toggle('active', s.audioOn);
+    el.audio.setAttribute('aria-pressed', String(s.audioOn));
+    el.audioIcon.innerHTML = s.audioOn ? ICON_ON : ICON_OFF;
+  }
+  el.audio.addEventListener('click', () => setAudio(!s.audioOn));
+  setAudio(false);
+
+  // ---------- Scherm aan houden ----------
+  let wakeLock = null;
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && s.source) keepAwake(); });
+
+  // ---------- Bluetooth (FTMS, Rower Data 0x2AD1) ----------
+  const FTMS = 0x1826, ROWER_DATA = 0x2ad1;
+  let device = null, wantConnected = false, retryTimer = null;
+
+  function parseRowerData(dv) {
+    let i = 0;
+    const flags = dv.getUint16(i, true); i += 2;
+    const out = {};
+    if (!(flags & 0x0001)) { out.spm = dv.getUint8(i) / 2; out.strokes = dv.getUint16(i + 1, true); i += 3; } // slagtempo (0,5 nauwkeurig) + aantal slagen
+    if (flags & 0x0002) i += 1;                                               // gemiddeld slagtempo
+    if (flags & 0x0004) { out.distance = dv.getUint16(i, true) | (dv.getUint8(i + 2) << 16); i += 3; }
+    if (flags & 0x0008) { out.pace = dv.getUint16(i, true); i += 2; }        // seconden per 500 m
+    return out;
+  }
+
+  function setConn(state, text) {
+    el.conn.classList.toggle('on', state === 'on');
+    el.conn.classList.toggle('busy', state === 'busy');
+    el.conn.classList.toggle('cta', state === 'off');
+    el.connLbl.textContent = text;
+  }
+
+  async function connectGatt() {
+    setConn('busy', 'Verbinden...');
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(FTMS);
+    const ch = await svc.getCharacteristic(ROWER_DATA);
+    ch.addEventListener('characteristicvaluechanged', e => { if (s.source === 'ble') onData(parseRowerData(e.target.value)); });
+    await ch.startNotifications();
+    setConn('on', device.name || 'Roeier');
+  }
+
+  function scheduleRetry() {
+    clearTimeout(retryTimer);
+    if (!wantConnected) return;
+    setConn('busy', 'Verbinding kwijt, opnieuw...');
+    retryTimer = setTimeout(async () => {
+      try { await connectGatt(); } catch (e) { scheduleRetry(); }
+    }, 3000);
+  }
+
+  async function connect() {
+    if (!navigator.bluetooth) {
+      hint('Deze browser kan geen Bluetooth. Open deze pagina in Bluefy.');
+      return;
+    }
+    try {
+      device = await navigator.bluetooth.requestDevice({ filters: [{ services: [FTMS] }] });
+      device.addEventListener('gattserverdisconnected', scheduleRetry);
+      wantConnected = true;
+      stopDemo();
+      s.source = 'ble';
+      s.distanceOffset = null;
+      s.strokes = null;
+      await connectGatt();
+      keepAwake();
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') { if (!wantConnected) setConn('off', 'Verbinden'); return; }
+      if (wantConnected) scheduleRetry();
+      else { setConn('off', 'Verbinden'); hint('Verbinden lukte niet. Probeer het nog eens.'); }
+    }
+  }
+
+  function disconnect() {
+    wantConnected = false;
+    clearTimeout(retryTimer);
+    try { if (device && device.gatt.connected) device.gatt.disconnect(); } catch (e) {}
+    if (s.source === 'ble') s.source = null;
+    setConn('off', 'Verbinden');
+    render();
+  }
+
+  el.conn.addEventListener('click', () => {
+    if (wantConnected) { if (confirm('Verbinding met de roeier verbreken?')) disconnect(); }
+    else connect();
+  });
+
+  // ---------- Demo ----------
+  const demo = (() => {
+    let timer = null, t0 = 0, dist = 0, count = 0;
+    function stroke() {
+      const t = (performance.now() - t0) / 1000;
+      // Tempo schommelt rustig rond het doel, met af en toe een uitschieter
+      const spm = Math.max(14, Math.min(38, s.goal + 3.2 * Math.sin(t / 9) + 1.6 * Math.sin(t / 3.1) + (Math.random() - .5)));
+      const pace = Math.max(95, 150 - (spm - 20) * 2.2 + (Math.random() - .5) * 4); // s per 500 m
+      const interval = 60 / spm;
+      dist += 500 / pace * interval;
+      onData({ spm: Math.round(spm * 2) / 2, strokes: ++count, distance: dist, pace: Math.round(pace) });
+      timer = setTimeout(stroke, interval * 1000);
+    }
+    return {
+      start() { t0 = performance.now(); dist = 0; count = 0; s.strokes = 0; s.distanceOffset = 0; s.distance = 0; s.elapsed = 0; stroke(); },
+      stop() { clearTimeout(timer); timer = null; },
+      reset() { dist = 0; s.distance = 0; s.distanceOffset = 0; },
+      get on() { return timer !== null; }
+    };
+  })();
+
+  function stopDemo() {
+    demo.stop();
+    el.demo.classList.remove('active');
+    el.demo.setAttribute('aria-pressed', 'false');
+    if (s.source === 'demo') { s.source = null; s.spm = 0; }
+  }
+
+  el.demo.addEventListener('click', () => {
+    if (s.source === 'demo') { stopDemo(); render(); return; }
+    if (wantConnected) { hint('Verbreek eerst de verbinding met de roeier.'); return; }
+    s.source = 'demo';
+    el.demo.classList.add('active');
+    el.demo.setAttribute('aria-pressed', 'true');
+    demo.start();
+    keepAwake();
+    hint('Demo: er komen nagebootste slagen binnen.');
+  });
+
+  // ---------- Melding ----------
+  let hintTimer = null;
+  function hint(text) {
+    el.hint.textContent = text;
+    el.hint.classList.add('show');
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => el.hint.classList.remove('show'), 3200);
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>
