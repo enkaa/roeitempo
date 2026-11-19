@@ -10,16 +10,20 @@
 <style>
   :root {
     --bg: #0b0d10;
-    --raise: #171b20;
-    --line: #23292f;
+    --tile: #161a1f;
+    --raise: #22282f;
+    --line: #262c34;
     --text: #f2f4f6;
+    --soft: #c9ced4;
     --muted: #7d8793;
     --ok: #30d158;
     --slow: #ff9f0a;
     --fast: #ff453a;
-    --idle: #4a525c;
+    --idle: #5d6773;
     --blue: #0a84ff;
     --state: var(--idle);
+    --gap: clamp(8px, 1.6vmin, 14px);
+    --r: clamp(12px, 2.4vmin, 20px);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -27,100 +31,84 @@
     -webkit-user-select: none; user-select: none; overflow: hidden; }
   body { display: flex; }
   button { font: inherit; color: inherit; cursor: pointer; padding: 0; border: 0; background: none; }
+  button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   .num { font-variant-numeric: tabular-nums; }
 
-  /* Ronde knopjes (geluid, opnieuw, bluetooth) */
-  .ib { flex: none; width: var(--ib, 34px); height: var(--ib, 34px); border-radius: 50%;
-    background: var(--raise); color: var(--muted); display: grid; place-items: center; position: relative; }
-  .ib svg { width: 54%; height: 54%; }
-  .ib:active, .pm:active { filter: brightness(1.4); }
-  .ib.on { color: var(--ok); background: rgba(48, 209, 88, .14); }
+  /* Tegels: breed venster = tempo links, rechts ritme, doel en metronoom, onderin de cijfers */
+  .tiles { flex: 1; min-width: 0; min-height: 0; display: grid; gap: var(--gap);
+    padding: max(var(--gap), env(safe-area-inset-top)) max(var(--gap), env(safe-area-inset-right)) max(var(--gap), env(safe-area-inset-bottom)) max(var(--gap), env(safe-area-inset-left));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      "top top top top top top"
+      "tempo tempo tempo ritme ritme ritme"
+      "tempo tempo tempo doel doel doel"
+      "tempo tempo tempo metro metro metro"
+      "s1 s1 s2 s2 s3 s3"; }
+  /* Staand venster: alles onder elkaar */
+  @media (max-aspect-ratio: 1/1) {
+    .tiles { grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+      grid-template-areas:
+        "top top top top top top"
+        "tempo tempo tempo tempo tempo tempo"
+        "ritme ritme ritme ritme ritme ritme"
+        "doel doel doel metro metro metro"
+        "s1 s1 s2 s2 s3 s3"; }
+  }
+
+  .top { grid-area: top; display: flex; justify-content: flex-end; align-items: center; gap: var(--gap); }   /* linksboven vrij voor de vensterknopjes */
+  .tile { background: var(--tile); border-radius: var(--r); padding: clamp(10px, 2.2vmin, 18px); min-width: 0; min-height: 0; position: relative; }
+  .lbl { font-size: clamp(10px, 1.7vmin, 13px); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
+
+  .t-tempo { grid-area: tempo; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; }
+  .big { display: flex; align-items: baseline; gap: .12em; line-height: .9; font-size: clamp(56px, 19vmin, 170px); }
+  .big .now { font-weight: 700; color: var(--state); transition: color .4s; letter-spacing: -.03em; }
+  .big .of { font-size: .32em; font-weight: 600; color: var(--soft); }
+  .cue { font-size: clamp(14px, 2.8vmin, 22px); font-weight: 600; color: var(--state); transition: color .4s; }
+
+  .t-ritme { grid-area: ritme; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; min-height: 90px; }
+  .t-ritme canvas { width: 100%; height: 100%; display: block; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .t-doel { grid-area: doel; }
+  .t-metro { grid-area: metro; }
+  .stepper { display: flex; align-items: center; gap: clamp(8px, 1.6vmin, 14px); }
+  .stepper .v { font-size: clamp(20px, 3.6vmin, 30px); font-weight: 700; min-width: 2ch; text-align: center; }
+  .pm { width: clamp(38px, 6.4vmin, 52px); height: clamp(38px, 6.4vmin, 52px); border-radius: 50%; background: var(--raise); display: grid; place-items: center; }
+  .pm svg { width: 40%; height: 40%; }
+  .pm:active, .ib:active, .chip:active { filter: brightness(1.4); }
+
+  .switch { width: 54px; height: 32px; border-radius: 16px; background: #3a4049; position: relative; transition: background .2s; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 26px; height: 26px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .switch[aria-checked="true"] { background: var(--ok); }
+  .switch[aria-checked="true"]::after { transform: translateX(22px); }
+
+  .stat { display: flex; flex-direction: column; justify-content: space-between; gap: clamp(8px, 2vmin, 18px); }
+  .stat .v { font-size: clamp(20px, 5.4vmin, 44px); font-weight: 650; line-height: 1; white-space: nowrap; }
+  .s1 { grid-area: s1; } .s2 { grid-area: s2; } .s3 { grid-area: s3; }
+
+  /* Knoppen bovenin */
+  .ib { flex: none; width: 38px; height: 38px; border-radius: 50%; background: var(--tile); color: var(--muted); display: grid; place-items: center; position: relative; }
+  .ib svg { width: 52%; height: 52%; }
   .ib.bt.cta { color: #fff; background: var(--blue); }
   .ib.bt.connected { color: var(--blue); }
   .ib.bt.busy { color: var(--slow); }
-  .ib.bt .dot { position: absolute; right: 3%; top: 3%; width: 26%; height: 26%; border-radius: 50%;
-    background: var(--ok); border: 2px solid var(--bg); display: none; }
+  .ib.bt .dot { position: absolute; right: 2px; top: 2px; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); border: 2px solid var(--bg); display: none; }
   .ib.bt.connected .dot { display: block; }
-  .chip { flex: none; height: var(--ib, 34px); padding: 0 .9em; border-radius: 999px; background: var(--raise);
-    color: var(--muted); font-size: .8em; font-weight: 600; letter-spacing: .02em; }
+  .chip { flex: none; height: 38px; padding: 0 14px; border-radius: 999px; background: var(--tile); color: var(--soft);
+    font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
+  .chip svg { width: 18px; height: 18px; }
   .chip.on { color: var(--ok); background: rgba(48, 209, 88, .14); }
-
-  /* ====== Kaart (standaard) ====== */
-  .card { flex: 1; display: grid; min-width: 0; min-height: 0;
-    padding: max(10px, 3vmin); gap: max(6px, 2vmin);
-    grid-template-rows: auto minmax(0, 1fr) auto auto;
-    grid-template-areas: "top" "gauge" "target" "stats";
-    font-size: clamp(12px, 4.4vmin, 18px); --ib: clamp(30px, 10.5vmin, 44px); }
-  @media (min-aspect-ratio: 7/5) {
-    .card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      grid-template-rows: auto minmax(0, 1fr) auto;
-      grid-template-areas: "top top" "gauge target" "gauge stats"; }
-    .card .target { align-self: end; }
-  }
-  /* Linksboven vrijlaten voor de vensterknopjes van iPadOS */
-  .card .top { grid-area: top; display: flex; justify-content: flex-end; align-items: center; gap: max(6px, 1.6vmin); }
-
-  .gauge { grid-area: gauge; position: relative; min-height: 0; min-width: 0; }
-  .gauge svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
-  .track { fill: none; stroke: var(--line); stroke-linecap: round; }
-  .fill { fill: none; stroke: var(--state); stroke-linecap: round; transition: stroke .4s; }
-  .zone { fill: none; stroke: var(--ok); stroke-linecap: round; opacity: .9; }
-  .tick { stroke: var(--text); stroke-linecap: round; }
-  .needle { fill: var(--state); stroke: var(--bg); transition: fill .4s; }
-  .spm { fill: var(--text); font-weight: 700; letter-spacing: -.02em; }
-  .unit { fill: var(--muted); font-weight: 600; letter-spacing: .12em; }
-  .state { fill: var(--state); font-weight: 600; transition: fill .4s; }
-
-  .target { grid-area: target; display: flex; align-items: center; justify-content: center; gap: max(10px, 4vmin); }
-  .pm { width: clamp(40px, 13vmin, 64px); height: clamp(40px, 13vmin, 64px); border-radius: 50%;
-    background: var(--raise); display: grid; place-items: center; }
-  .pm svg { width: 38%; height: 38%; }
-  .goal { text-align: center; min-width: 3.2em; }
-  .goal .v { font-size: 1.9em; font-weight: 700; line-height: 1; }
-  .goal .k, .stat .k { font-size: .62em; color: var(--muted); text-transform: uppercase; letter-spacing: .12em; margin-top: .35em; font-weight: 600; }
-
-  .stats { grid-area: stats; display: grid; grid-template-columns: repeat(3, 1fr);
-    border-top: 1px solid var(--line); padding-top: max(6px, 2vmin); }
-  .stat { text-align: center; min-width: 0; }
-  .stat + .stat { border-left: 1px solid var(--line); }
-  .stat .v { font-size: 1.45em; font-weight: 650; line-height: 1.1; white-space: nowrap; }
-
-  /* ====== Smalle balk (breed en laag venster, zoals de mockup) ====== */
-  .bar { display: none; }
-  @media (max-height: 300px) and (min-aspect-ratio: 2/1) {
-    .card { display: none; }
-    .bar { flex: 1; display: flex; align-items: center; min-width: 0;
-      gap: clamp(8px, 7vh, 18px); padding: 0 clamp(12px, 8vh, 24px);
-      font-size: clamp(12px, min(15vh, 3.3vw), 22px); --ib: clamp(30px, min(34vh, 7.2vw), 44px); }
-  }
-  .hbar { flex: 1 1 60px; min-width: 40px; position: relative; height: .5em; border-radius: 999px; background: var(--line); }
-  .hzone { position: absolute; top: -.3em; height: .2em; border-radius: 999px; background: var(--ok); }
-  .hfill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--state); transition: background .4s, width .4s; }
-  .hgoal { position: absolute; top: -.35em; bottom: -.35em; width: 2px; margin-left: -1px; border-radius: 2px; background: var(--text); }
-  .hspm { flex: none; display: flex; align-items: baseline; gap: .25em; white-space: nowrap; }
-  .hspm b { font-size: 1.75em; font-weight: 700; color: var(--state); transition: color .4s; }
-  .hspm .g { font-size: 1.75em; font-weight: 700; }
-  .hspm .sl { font-size: 1.2em; color: var(--muted); font-weight: 600; }
-  .hspm small { font-size: .62em; color: var(--muted); font-weight: 600; letter-spacing: .1em; margin-left: .2em; }
-  .hpm { flex: none; display: flex; gap: .4em; }
-  .hpm .pm { width: var(--ib); height: var(--ib); }
-  .hmeta { flex: none; text-align: right; line-height: 1.25; white-space: nowrap; }
-  .hmeta .d { font-weight: 650; }
-  .hmeta .t { color: var(--muted); font-size: .85em; }
-  @media (max-height: 300px) and (min-aspect-ratio: 2/1) and (max-width: 480px) {
-    .hpm { display: none; }    /* heel smal: alleen kijken, doel instellen in het grotere venster */
-  }
 
   .pipwrap { position: fixed; inset: 0; z-index: 10; background: rgba(11, 13, 16, .94); display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 14px; padding: 16px; text-align: center;
     opacity: 0; pointer-events: none; transition: opacity .2s; }
   .pipwrap.show { opacity: 1; pointer-events: auto; }
   .pipwrap p { margin: 0; font-size: 15px; color: var(--text); }
-  .pipwrap video { width: min(92vw, 420px); aspect-ratio: 840 / 96; border-radius: 10px; background: #111418; cursor: pointer; }
-  .pipwrap .chip { --ib: 36px; }
-  .hint { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); background: #2a3037; color: var(--text);
+  .pipwrap video { width: min(92vw, 520px); aspect-ratio: 840 / 96; border-radius: 10px; background: #111418; cursor: pointer; }
+  .hint { position: fixed; left: 50%; top: calc(max(12px, env(safe-area-inset-top)) + 50px); transform: translateX(-50%); background: #2a3037; color: var(--text);
     font-size: 13px; padding: 8px 14px; border-radius: 10px; max-width: 92vw; text-align: center; width: max-content;
-    opacity: 0; pointer-events: none; transition: opacity .3s; }
+    opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 20; }
   .hint.show { opacity: 1; }
 </style>
 </head>
@@ -129,8 +117,6 @@
 <!-- Pictogrammen -->
 <svg width="0" height="0" style="position:absolute">
   <defs>
-    <symbol id="i-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" fill="currentColor"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18 6.5a8 8 0 0 1 0 11"/></symbol>
-    <symbol id="i-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" fill="currentColor"/><path d="M16 9.5l5 5"/><path d="M21 9.5l-5 5"/></symbol>
     <symbol id="i-bt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></symbol>
     <symbol id="i-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3"/><path d="M3.5 4v4.5H8"/></symbol>
     <symbol id="i-pip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><rect x="11.5" y="12" width="7" height="4.5" rx="1" fill="currentColor"/></symbol>
@@ -139,52 +125,43 @@
   </defs>
 </svg>
 
-<main class="card">
+<main class="tiles">
   <div class="top">
     <button class="chip" data-act="demo" type="button" aria-pressed="false">Demo</button>
-    <button class="ib" data-act="pip" type="button" aria-pressed="false" aria-label="Zwevende balk"><svg><use href="#i-pip"/></svg></button>
-    <button class="ib" data-act="reset" type="button" aria-label="Afstand en tijd op nul zetten"><svg><use href="#i-reset"/></svg></button>
-    <button class="ib" data-act="audio" type="button" aria-pressed="false" aria-label="Metronoom aan of uit"><svg><use href="#i-off"/></svg></button>
+    <button class="ib" data-act="reset" type="button" aria-label="Afstand en tijd op nul zetten" title="Afstand en tijd op nul zetten"><svg><use href="#i-reset"/></svg></button>
+    <button class="chip" data-act="pip" type="button" aria-pressed="false"><svg><use href="#i-pip"/></svg>Zwevende balk</button>
     <button class="ib bt cta" data-act="conn" type="button" aria-label="Verbinden met de roeier"><svg><use href="#i-bt"/></svg><span class="dot"></span></button>
   </div>
 
-  <div class="gauge">
-    <svg viewBox="0 -6 200 178" aria-hidden="true">
-      <path class="track" id="track" stroke-width="11"/>
-      <path class="fill" id="fill" stroke-width="11"/>
-      <path class="zone" id="zone" stroke-width="4"/>
-      <line class="tick" id="goalTick" stroke-width="3"/>
-      <circle class="needle" id="needle" r="8" stroke-width="3"/>
-      <text class="spm num" data-v="spm" x="100" y="108" text-anchor="middle" font-size="58">--</text>
-      <text class="unit" x="100" y="127" text-anchor="middle" font-size="10">SLAGEN / MIN</text>
-      <text class="state" data-v="state" x="100" y="160" text-anchor="middle" font-size="14">Niet verbonden</text>
-    </svg>
-  </div>
+  <section class="tile t-tempo">
+    <div class="lbl">Tempo</div>
+    <div class="big num"><span class="now" data-v="spm">--</span><span class="of">/ <span data-v="goal">24</span></span></div>
+    <div class="cue" data-v="state">Niet verbonden</div>
+  </section>
 
-  <div class="target">
-    <button class="pm" data-act="minus" type="button" aria-label="Doeltempo lager"><svg><use href="#i-minus"/></svg></button>
-    <div class="goal"><div class="v num" data-v="goal">24</div><div class="k">Doel</div></div>
-    <button class="pm" data-act="plus" type="button" aria-label="Doeltempo hoger"><svg><use href="#i-plus"/></svg></button>
-  </div>
+  <section class="tile t-ritme">
+    <div class="lbl">Ritme</div>
+    <canvas id="ritme" aria-label="Roeiertje dat de slag voordoet op het doeltempo"></canvas>
+  </section>
 
-  <div class="stats">
-    <div class="stat"><div class="v num" data-v="dist">0</div><div class="k">Meter</div></div>
-    <div class="stat"><div class="v num" data-v="time">0:00</div><div class="k">Tijd</div></div>
-    <div class="stat"><div class="v num" data-v="pace">-:--</div><div class="k">/500 m</div></div>
-  </div>
+  <section class="tile t-doel row">
+    <div class="lbl">Doel</div>
+    <div class="stepper">
+      <button class="pm" data-act="minus" type="button" aria-label="Doeltempo lager"><svg><use href="#i-minus"/></svg></button>
+      <span class="v num" data-v="goal">24</span>
+      <button class="pm" data-act="plus" type="button" aria-label="Doeltempo hoger"><svg><use href="#i-plus"/></svg></button>
+    </div>
+  </section>
+
+  <section class="tile t-metro row">
+    <div class="lbl" id="metroLbl">Metronoom</div>
+    <button class="switch" data-act="audio" type="button" role="switch" aria-checked="false" aria-labelledby="metroLbl"></button>
+  </section>
+
+  <section class="tile stat s1"><div class="lbl">Meter</div><div class="v num" data-v="dist">0</div></section>
+  <section class="tile stat s2"><div class="lbl">Tijd</div><div class="v num" data-v="time">0:00</div></section>
+  <section class="tile stat s3"><div class="lbl">Per 500 m</div><div class="v num" data-v="pace">-:--</div></section>
 </main>
-
-<div class="bar">
-  <button class="ib" data-act="audio" type="button" aria-pressed="false" aria-label="Metronoom aan of uit"><svg><use href="#i-off"/></svg></button>
-  <div class="hbar" aria-hidden="true"><div class="hfill" id="hfill"></div><div class="hzone" id="hzone"></div><div class="hgoal" id="hgoal"></div></div>
-  <div class="hspm num"><b data-v="spm">--</b><span class="sl">/</span><span class="g" data-v="goal">24</span><small>SPM</small></div>
-  <div class="hpm">
-    <button class="pm" data-act="minus" type="button" aria-label="Doeltempo lager"><svg><use href="#i-minus"/></svg></button>
-    <button class="pm" data-act="plus" type="button" aria-label="Doeltempo hoger"><svg><use href="#i-plus"/></svg></button>
-  </div>
-  <div class="hmeta num"><div class="d"><span data-v="dist">0</span> m</div><div class="t" data-v="time">0:00</div></div>
-  <button class="ib bt cta" data-act="conn" type="button" aria-label="Verbinden met de roeier"><svg><use href="#i-bt"/></svg><span class="dot"></span></button>
-</div>
 
 <div class="hint" id="hint"></div>
 
@@ -214,10 +191,7 @@
   const $ = id => document.getElementById(id);
   const all = sel => document.querySelectorAll(sel);
   const setText = (key, text) => all(`[data-v="${key}"]`).forEach(n => { if (n.textContent !== text) n.textContent = text; });
-  const el = {
-    track: $('track'), zone: $('zone'), fill: $('fill'), goalTick: $('goalTick'), needle: $('needle'),
-    hfill: $('hfill'), hzone: $('hzone'), hgoal: $('hgoal'), hint: $('hint')
-  };
+  const el = { hint: $('hint'), ritme: $('ritme') };
 
   // ---------- Toestand ----------
   const s = {
@@ -233,25 +207,12 @@
     audioOn: false
   };
 
-  // ---------- Meter ----------
-  const CX = 100, CY = 100, R = 84, A0 = 150, A1 = 390; // boog van 240 graden, onderkant open
-  const clampSpm = v => Math.min(SPM_MAX, Math.max(SPM_MIN, v));
-  const frac = v => (clampSpm(v) - SPM_MIN) / (SPM_MAX - SPM_MIN);
-  const pt = (deg, r = R) => { const a = deg * Math.PI / 180; return [CX + r * Math.cos(a), CY + r * Math.sin(a)]; };
-  const angleFor = v => A0 + frac(v) * (A1 - A0);
-  const arc = (d0, d1, r = R) => {
-    if (d1 - d0 < 0.01) d1 = d0 + 0.01;
-    const [x0, y0] = pt(d0, r), [x1, y1] = pt(d1, r);
-    return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${r} ${r} 0 ${d1 - d0 > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`;
-  };
-  el.track.setAttribute('d', arc(A0, A1));
-
   function status() {
     if (!s.source) return { key: 'idle', text: 'Niet verbonden' };
     if (!s.spm || performance.now() - s.lastStrokeAt > IDLE_AFTER_MS) return { key: 'idle', text: 'Nog geen slagen' };
     const diff = s.spm - s.goal;
     if (Math.abs(diff) <= TOLERANCE) return { key: 'ok', text: 'Op tempo' };
-    return diff < 0 ? { key: 'slow', text: 'Te langzaam' } : { key: 'fast', text: 'Te snel' };
+    return diff < 0 ? { key: 'slow', text: 'Sneller' } : { key: 'fast', text: 'Rustiger' };
   }
 
   const COLORS = { ok: 'var(--ok)', slow: 'var(--slow)', fast: 'var(--fast)', idle: 'var(--idle)' };
@@ -261,23 +222,7 @@
     document.documentElement.style.setProperty('--state', COLORS[st.key]);
     const active = st.key !== 'idle';
 
-    // Kaart
-    el.zone.setAttribute('d', arc(angleFor(s.goal - TOLERANCE), angleFor(s.goal + TOLERANCE), R + 12));
-    el.fill.setAttribute('d', active ? arc(A0, angleFor(s.spm)) : '');
-    const [nx, ny] = pt(angleFor(active ? s.spm : SPM_MIN));
-    el.needle.setAttribute('cx', nx.toFixed(2)); el.needle.setAttribute('cy', ny.toFixed(2));
-    el.needle.style.display = active ? '' : 'none';
-    const ga = angleFor(s.goal), [gx0, gy0] = pt(ga, R - 9), [gx1, gy1] = pt(ga, R + 16);
-    el.goalTick.setAttribute('x1', gx0); el.goalTick.setAttribute('y1', gy0);
-    el.goalTick.setAttribute('x2', gx1); el.goalTick.setAttribute('y2', gy1);
-
-    // Balk
-    el.hfill.style.width = active ? (frac(s.spm) * 100).toFixed(1) + '%' : '0';
-    el.hzone.style.left = (frac(s.goal - TOLERANCE) * 100).toFixed(1) + '%';
-    el.hzone.style.width = ((frac(s.goal + TOLERANCE) - frac(s.goal - TOLERANCE)) * 100).toFixed(1) + '%';
-    el.hgoal.style.left = (frac(s.goal) * 100).toFixed(1) + '%';
-
-    // Teksten (in kaart en balk tegelijk)
+    // Teksten in de tegels
     setText('spm', active ? String(Math.round(s.spm)) : '--');
     setText('state', st.text);
     setText('goal', String(s.goal));
@@ -357,6 +302,39 @@
     return { arms: 1 - ease(k / 0.25), body: 1 - ease((k - 0.15) / 0.3), legs: 1 - ease((k - 0.35) / 0.65) };
   }
 
+  // Roeiertje dat de slag voordoet, kijkt naar links (daar zit de machine)
+function drawRower(g, x, y, w, h, ph) {
+    const p = strokeParts(ph), catchNow = ph < 0.06 || ph > 0.985;
+    const line = (x0, y0, x1, y1, c, lw) => { g.strokeStyle = c; g.lineWidth = lw; g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); };
+    const u = Math.min(h / 1.02, w / 1.9), lw = Math.max(1.5, u * 0.06);
+    const x0 = x + Math.max(0, (w - 1.9 * u) / 2), ry = y + h - u * 0.05;
+    const fx = x0 + u * 0.24, fy = ry - u * 0.14, handleY = ry - u * 0.40;
+    const bend = (ax, ay, bx, by, len, pick) => {   // twee gelijke staven, knik naar de gekozen kant
+      const dx = bx - ax, dy = by - ay, d = Math.min(Math.hypot(dx, dy), 2 * len - 0.01) || 0.01;
+      const off = Math.sqrt(Math.max(0, len * len - (d / 2) ** 2)), mx = (ax + bx) / 2, my = (ay + by) / 2;
+      const p1 = [dy / d, -dx / d], p2 = [-dy / d, dx / d], q = pick(p1) >= pick(p2) ? p1 : p2;
+      return [mx + q[0] * off, my + q[1] * off];
+    };
+    line(x0 + u * 0.12, ry, x0 + 1.9 * u, ry, '#262c34', lw);                           // rail
+    line(fx - u * 0.05, ry - u * 0.30, fx + u * 0.01, ry - u * 0.02, '#7d8793', lw);   // voetenplank
+    const hipX = lerp(fx + u * 0.27, fx + u * 0.70, p.legs), hipY = ry - u * 0.10;
+    const [kx, ky] = bend(fx, fy, hipX, hipY, u * 0.36, q => -q[1]);                   // knie omhoog
+    const th = lerp(0.40, -0.35, p.body), T = u * 0.42;                                // voorover naar achterover
+    const shX = hipX - Math.sin(th) * T, shY = hipY - Math.cos(th) * T;
+    const a = u * 0.21, reach = 2 * a * 0.98;
+    const extX = shX - Math.sqrt(Math.max(0, reach * reach - (handleY - shY) ** 2));
+    const handX = lerp(extX, hipX - Math.sin(th) * T * 0.55 - u * 0.06, p.arms);       // hendel naar de onderste ribben
+    const [ex, ey] = bend(shX, shY, handX, handleY, a, q => q[1] + q[0] * 0.6);       // elleboog naar onder en achter
+    line(x0, handleY, handX, handleY, '#262c34', lw * 0.7);                            // ketting naar de machine
+    line(fx, fy, kx, ky, '#8a94a1', lw); line(kx, ky, hipX, hipY, '#8a94a1', lw);
+    line(hipX, hipY, shX, shY, '#c9ced4', lw * 1.15);
+    line(shX, shY, ex, ey, '#c9ced4', lw); line(ex, ey, handX, handleY, '#c9ced4', lw);
+    g.fillStyle = '#c9ced4'; g.beginPath(); g.arc(shX - Math.sin(th) * u * 0.13, shY - Math.cos(th) * u * 0.13, u * 0.078, 0, Math.PI * 2); g.fill();
+    g.fillStyle = catchNow ? '#30d158' : '#f2f4f6';                                         // groen bij de inzet
+    g.beginPath(); g.roundRect ? g.roundRect(hipX - u * 0.10, ry - u * 0.085, u * 0.2, u * 0.055, u * 0.03) : g.rect(hipX - u * 0.10, ry - u * 0.085, u * 0.2, u * 0.055); g.fill();
+  }
+
+
   // ---------- Metronoom (Web Audio) ----------
   const metro = (() => {
     let ctx = null, timer = null, nextAt = 0;
@@ -416,11 +394,7 @@
   function setAudio(on) {
     s.audioOn = on && metro.start();
     if (!s.audioOn) metro.stop();
-    all('[data-act="audio"]').forEach(b => {
-      b.classList.toggle('on', s.audioOn);
-      b.setAttribute('aria-pressed', String(s.audioOn));
-      b.querySelector('use').setAttribute('href', s.audioOn ? '#i-on' : '#i-off');
-    });
+    all('[data-act="audio"]').forEach(b => b.setAttribute('aria-checked', String(s.audioOn)));
   }
 
   // ---------- Scherm aan houden ----------
@@ -555,38 +529,6 @@
     const HEX = { ok: '#30d158', slow: '#ff9f0a', fast: '#ff453a', idle: '#4a525c' };
     let ready = false, tickFlip = false;
 
-    // Roeiertje dat de slag voordoet, kijkt naar links (daar zit de machine)
-    function rower(x, y, w, h, ph) {
-      const p = strokeParts(ph), catchNow = ph < 0.06 || ph > 0.985;
-      const line = (x0, y0, x1, y1, c, lw) => { g.strokeStyle = c; g.lineWidth = lw; g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); };
-      const u = Math.min(h / 1.02, w / 1.9), lw = Math.max(1.5, u * 0.06);
-      const x0 = x + Math.max(0, (w - 1.9 * u) / 2), ry = y + h - u * 0.05;
-      const fx = x0 + u * 0.24, fy = ry - u * 0.14, handleY = ry - u * 0.40;
-      const bend = (ax, ay, bx, by, len, pick) => {   // twee gelijke staven, knik naar de gekozen kant
-        const dx = bx - ax, dy = by - ay, d = Math.min(Math.hypot(dx, dy), 2 * len - 0.01) || 0.01;
-        const off = Math.sqrt(Math.max(0, len * len - (d / 2) ** 2)), mx = (ax + bx) / 2, my = (ay + by) / 2;
-        const p1 = [dy / d, -dx / d], p2 = [-dy / d, dx / d], q = pick(p1) >= pick(p2) ? p1 : p2;
-        return [mx + q[0] * off, my + q[1] * off];
-      };
-      line(x0 + u * 0.12, ry, x0 + 1.9 * u, ry, '#262c34', lw);                           // rail
-      line(fx - u * 0.05, ry - u * 0.30, fx + u * 0.01, ry - u * 0.02, '#7d8793', lw);   // voetenplank
-      const hipX = lerp(fx + u * 0.27, fx + u * 0.70, p.legs), hipY = ry - u * 0.10;
-      const [kx, ky] = bend(fx, fy, hipX, hipY, u * 0.36, q => -q[1]);                   // knie omhoog
-      const th = lerp(0.40, -0.35, p.body), T = u * 0.42;                                // voorover naar achterover
-      const shX = hipX - Math.sin(th) * T, shY = hipY - Math.cos(th) * T;
-      const a = u * 0.21, reach = 2 * a * 0.98;
-      const extX = shX - Math.sqrt(Math.max(0, reach * reach - (handleY - shY) ** 2));
-      const handX = lerp(extX, hipX - Math.sin(th) * T * 0.55 - u * 0.06, p.arms);       // hendel naar de onderste ribben
-      const [ex, ey] = bend(shX, shY, handX, handleY, a, q => q[1] + q[0] * 0.6);       // elleboog naar onder en achter
-      line(x0, handleY, handX, handleY, '#262c34', lw * 0.7);                            // ketting naar de machine
-      line(fx, fy, kx, ky, '#8a94a1', lw); line(kx, ky, hipX, hipY, '#8a94a1', lw);
-      line(hipX, hipY, shX, shY, '#c9ced4', lw * 1.15);
-      line(shX, shY, ex, ey, '#c9ced4', lw); line(ex, ey, handX, handleY, '#c9ced4', lw);
-      g.fillStyle = '#c9ced4'; g.beginPath(); g.arc(shX - Math.sin(th) * u * 0.13, shY - Math.cos(th) * u * 0.13, u * 0.078, 0, Math.PI * 2); g.fill();
-      g.fillStyle = catchNow ? HEX.ok : '#f2f4f6';                                         // groen bij de inzet
-      g.beginPath(); g.roundRect ? g.roundRect(hipX - u * 0.10, ry - u * 0.085, u * 0.2, u * 0.055, u * 0.03) : g.rect(hipX - u * 0.10, ry - u * 0.085, u * 0.2, u * 0.055); g.fill();
-    }
-
     // De balk: 420 x 48 punten, getekend op dubbele resolutie
     function draw(st, active) {
       if (!g) return;
@@ -605,7 +547,7 @@
       g.fillText('/ ' + s.goal, x, 33);
 
       // Midden: het roeiertje
-      rower(104, 4, 170, 40, beatPhase());
+      drawRower(g, 104, 4, 170, 40, beatPhase());
 
       // Rechts: afstand en tijd
       g.textAlign = 'right';
@@ -696,6 +638,29 @@
     let lastArgs = null;
     setInterval(() => { if (lastArgs && isOn()) draw(...lastArgs); }, 50);
     return { draw, toggle, close };
+  })();
+
+  // ---------- Ritme-tegel: roeiertje op het doeltempo ----------
+  (() => {
+    const cv = el.ritme, g = cv.getContext('2d');
+    let w = 0, h = 0;
+    const fit = () => {
+      const r = cv.getBoundingClientRect(), k = window.devicePixelRatio || 1;
+      w = r.width; h = r.height;
+      cv.width = Math.max(1, Math.round(w * k)); cv.height = Math.max(1, Math.round(h * k));
+      g.setTransform(k, 0, 0, k, 0, 0);
+    };
+    if (window.ResizeObserver) new ResizeObserver(fit).observe(cv); else window.addEventListener('resize', fit);
+    fit();
+    const frame = () => {
+      if (document.visibilityState === 'visible' && w > 0 && h > 0) {
+        g.clearRect(0, 0, w, h);
+        const bh = Math.min(h, w / 1.9, 200);   // niet groter dan nodig
+        drawRower(g, 0, (h - bh) / 2, w, bh, beatPhase());
+      }
+      requestAnimationFrame(frame);
+    };
+    requestAnimationFrame(frame);
   })();
 
   // ---------- Knoppen ----------
