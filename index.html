@@ -116,7 +116,7 @@
     opacity: 0; pointer-events: none; transition: opacity .2s; }
   .pipwrap.show { opacity: 1; pointer-events: auto; }
   .pipwrap p { margin: 0; font-size: 15px; color: var(--text); }
-  .pipwrap video { width: min(92vw, 420px); aspect-ratio: 840 / 180; border-radius: 10px; background: #111418; cursor: pointer; }
+  .pipwrap video { width: min(92vw, 420px); aspect-ratio: 840 / 96; border-radius: 10px; background: #111418; cursor: pointer; }
   .pipwrap .chip { --ib: 36px; }
   .hint { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); background: #2a3037; color: var(--text);
     font-size: 13px; padding: 8px 14px; border-radius: 10px; max-width: 92vw; text-align: center; width: max-content;
@@ -189,7 +189,7 @@
 <div class="hint" id="hint"></div>
 
 <!-- Zwevende balk: wordt op dit canvas getekend en als video in Picture-in-Picture gezet -->
-<canvas id="pipCanvas" width="840" height="180" style="position:fixed;left:-9999px;top:0"></canvas>
+<canvas id="pipCanvas" width="840" height="96" style="position:fixed;left:-9999px;top:0"></canvas>
 <div class="pipwrap" id="pipWrap">
   <p>Tik op de balk om hem te laten zweven.</p>
   <video id="pipVideo" muted playsinline autoplay></video>
@@ -347,7 +347,15 @@
   }
   // Positie van de ritme-stip: snel heen (haal, 1/3 van de slag), rustig terug (herstel, 2/3)
   const DRIVE = 1 / 3;
-  const rhythmPos = ph => ph < DRIVE ? ph / DRIVE : 1 - (ph - DRIVE) / (1 - DRIVE);
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  const ease = k => 0.5 - 0.5 * Math.cos(Math.PI * clamp01(k));   // versnellen en afremmen
+  const lerp = (a, b, k) => a + (b - a) * k;
+  // Haal: benen, dan lijf, dan armen. Terug: armen, dan lijf, dan benen.
+  function strokeParts(ph) {
+    const drive = ph < DRIVE, k = drive ? ph / DRIVE : (ph - DRIVE) / (1 - DRIVE);
+    if (drive) return { legs: ease(k / 0.65), body: ease((k - 0.45) / 0.45), arms: ease((k - 0.7) / 0.3) };
+    return { arms: 1 - ease(k / 0.25), body: 1 - ease((k - 0.15) / 0.3), legs: 1 - ease((k - 0.35) / 0.65) };
+  }
 
   // ---------- Metronoom (Web Audio) ----------
   const metro = (() => {
@@ -547,54 +555,68 @@
     const HEX = { ok: '#30d158', slow: '#ff9f0a', fast: '#ff453a', idle: '#4a525c' };
     let ready = false, tickFlip = false;
 
-    // Korte aanwijzing in de zwevende balk
-    const CUE = { ok: 'Op tempo', slow: 'Sneller', fast: 'Rustiger' };
+    // Roeiertje dat de slag voordoet, kijkt naar links (daar zit de machine)
+    function rower(x, y, w, h, ph) {
+      const p = strokeParts(ph), catchNow = ph < 0.06 || ph > 0.985;
+      const line = (x0, y0, x1, y1, c, lw) => { g.strokeStyle = c; g.lineWidth = lw; g.lineCap = 'round'; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke(); };
+      const u = Math.min(h / 1.02, w / 1.9), lw = Math.max(1.5, u * 0.06);
+      const x0 = x + Math.max(0, (w - 1.9 * u) / 2), ry = y + h - u * 0.05;
+      const fx = x0 + u * 0.24, fy = ry - u * 0.14, handleY = ry - u * 0.40;
+      const bend = (ax, ay, bx, by, len, pick) => {   // twee gelijke staven, knik naar de gekozen kant
+        const dx = bx - ax, dy = by - ay, d = Math.min(Math.hypot(dx, dy), 2 * len - 0.01) || 0.01;
+        const off = Math.sqrt(Math.max(0, len * len - (d / 2) ** 2)), mx = (ax + bx) / 2, my = (ay + by) / 2;
+        const p1 = [dy / d, -dx / d], p2 = [-dy / d, dx / d], q = pick(p1) >= pick(p2) ? p1 : p2;
+        return [mx + q[0] * off, my + q[1] * off];
+      };
+      line(x0 + u * 0.12, ry, x0 + 1.9 * u, ry, '#262c34', lw);                           // rail
+      line(fx - u * 0.05, ry - u * 0.30, fx + u * 0.01, ry - u * 0.02, '#7d8793', lw);   // voetenplank
+      const hipX = lerp(fx + u * 0.27, fx + u * 0.70, p.legs), hipY = ry - u * 0.10;
+      const [kx, ky] = bend(fx, fy, hipX, hipY, u * 0.36, q => -q[1]);                   // knie omhoog
+      const th = lerp(0.40, -0.35, p.body), T = u * 0.42;                                // voorover naar achterover
+      const shX = hipX - Math.sin(th) * T, shY = hipY - Math.cos(th) * T;
+      const a = u * 0.21, reach = 2 * a * 0.98;
+      const extX = shX - Math.sqrt(Math.max(0, reach * reach - (handleY - shY) ** 2));
+      const handX = lerp(extX, hipX - Math.sin(th) * T * 0.55 - u * 0.06, p.arms);       // hendel naar de onderste ribben
+      const [ex, ey] = bend(shX, shY, handX, handleY, a, q => q[1] + q[0] * 0.6);       // elleboog naar onder en achter
+      line(x0, handleY, handX, handleY, '#262c34', lw * 0.7);                            // ketting naar de machine
+      line(fx, fy, kx, ky, '#8a94a1', lw); line(kx, ky, hipX, hipY, '#8a94a1', lw);
+      line(hipX, hipY, shX, shY, '#c9ced4', lw * 1.15);
+      line(shX, shY, ex, ey, '#c9ced4', lw); line(ex, ey, handX, handleY, '#c9ced4', lw);
+      g.fillStyle = '#c9ced4'; g.beginPath(); g.arc(shX - Math.sin(th) * u * 0.13, shY - Math.cos(th) * u * 0.13, u * 0.078, 0, Math.PI * 2); g.fill();
+      g.fillStyle = catchNow ? HEX.ok : '#f2f4f6';                                         // groen bij de inzet
+      g.beginPath(); g.roundRect ? g.roundRect(hipX - u * 0.10, ry - u * 0.085, u * 0.2, u * 0.055, u * 0.03) : g.rect(hipX - u * 0.10, ry - u * 0.085, u * 0.2, u * 0.055); g.fill();
+    }
 
+    // De balk: 420 x 48 punten, getekend op dubbele resolutie
     function draw(st, active) {
       if (!g) return;
       lastArgs = [st, active];
-      const col = HEX[st.key];
-      g.fillStyle = '#111418'; g.fillRect(0, 0, W, H);
+      g.setTransform(2, 0, 0, 2, 0, 0);
+      const BW = W / 2, BH = H / 2, col = HEX[st.key];
+      g.fillStyle = '#111418'; g.fillRect(0, 0, BW, BH);
       g.textBaseline = 'alphabetic';
 
-      // Links: tempo nu / doel, met een korte aanwijzing eronder
-      let x = 40;
-      g.font = `700 78px ${FONT}`; g.fillStyle = active ? col : '#5d6773';
+      // Links: tempo nu (kleur = op tempo, te langzaam of te snel) en het doel
+      let x = 14;
+      g.font = `700 24px ${FONT}`; g.fillStyle = active ? col : '#5d6773';
       const now = active ? String(Math.round(s.spm)) : '--';
-      g.fillText(now, x, 104); x += g.measureText(now).width + 8;
-      g.font = `600 42px ${FONT}`; g.fillStyle = '#c9ced4';
-      const goal = '/ ' + s.goal;
-      g.fillText(goal, x, 104); x += g.measureText(goal).width + 8;
-      g.font = `600 20px ${FONT}`; g.fillStyle = '#7d8793';
-      g.fillText('spm', x, 104);
-      g.font = `600 24px ${FONT}`; g.fillStyle = active ? col : '#7d8793';
-      g.fillText(active ? CUE[st.key] : st.text, 42, 146);
+      g.fillText(now, x, 33); x += g.measureText(now).width + 3;
+      g.font = `600 13px ${FONT}`; g.fillStyle = '#c9ced4';
+      g.fillText('/ ' + s.goal, x, 33);
 
-      // Scheidingslijnen
-      g.fillStyle = '#23292f';
-      g.fillRect(292, 44, 2, 92);
-      g.fillRect(612, 44, 2, 92);
-
-      // Midden: ritme. Stip gaat snel naar rechts (haal) en rustig terug (herstel); bij de inzet een groene puls
-      const ph = beatPhase(), x0 = 340, x1 = 566, y = 90;
-      const rr = (rx, ry, w, h, r, c) => { g.fillStyle = c; g.beginPath(); g.roundRect ? g.roundRect(rx, ry, w, h, r) : g.rect(rx, ry, w, h); g.fill(); };
-      rr(x0, y - 3, x1 - x0, 6, 3, '#262c34');
-      if (ph < 0.22) {
-        const k = ph / 0.22;
-        g.strokeStyle = `rgba(48, 209, 88, ${(1 - k) * 0.9})`; g.lineWidth = 4;
-        g.beginPath(); g.arc(x0, y, 14 + k * 26, 0, Math.PI * 2); g.stroke();
-      }
-      const catchNow = ph < 0.08 || ph > 0.97;
-      g.fillStyle = catchNow ? HEX.ok : '#f2f4f6';
-      g.beginPath(); g.arc(x0 + rhythmPos(ph) * (x1 - x0), y, catchNow ? 13 : 10, 0, Math.PI * 2); g.fill();
+      // Midden: het roeiertje
+      rower(104, 4, 170, 40, beatPhase());
 
       // Rechts: afstand en tijd
       g.textAlign = 'right';
-      g.font = `650 42px ${FONT}`; g.fillStyle = '#f2f4f6';
-      g.fillText(Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL') + ' m', W - 40, 96);
-      g.font = `500 30px ${FONT}`; g.fillStyle = '#8a94a1';
-      g.fillText(fmtTime(s.elapsed / 1000), W - 40, 140);
+      const t = fmtTime(s.elapsed / 1000);
+      g.font = `500 12px ${FONT}`; g.fillStyle = '#8a94a1';
+      g.fillText(t, BW - 14, 31);
+      const tw = g.measureText(t).width;
+      g.font = `650 15px ${FONT}`; g.fillStyle = '#f2f4f6';
+      g.fillText(Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL') + ' m', BW - 14 - tw - 8, 31);
       g.textAlign = 'left';
+      g.setTransform(1, 0, 0, 1, 0, 0);
 
       tickFlip = !tickFlip; g.fillStyle = tickFlip ? '#111418' : '#121519'; g.fillRect(0, H - 1, 1, 1);
     }
