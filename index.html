@@ -126,6 +126,7 @@
     <symbol id="i-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5H4z" fill="currentColor"/><path d="M16 9.5l5 5"/><path d="M21 9.5l-5 5"/></symbol>
     <symbol id="i-bt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></symbol>
     <symbol id="i-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3"/><path d="M3.5 4v4.5H8"/></symbol>
+    <symbol id="i-pip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><rect x="11.5" y="12" width="7" height="4.5" rx="1" fill="currentColor"/></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14M12 5v14"/></symbol>
   </defs>
@@ -134,6 +135,7 @@
 <main class="card">
   <div class="top">
     <button class="chip" data-act="demo" type="button" aria-pressed="false">Demo</button>
+    <button class="ib" data-act="pip" type="button" aria-pressed="false" aria-label="Zwevende balk"><svg><use href="#i-pip"/></svg></button>
     <button class="ib" data-act="reset" type="button" aria-label="Afstand en tijd op nul zetten"><svg><use href="#i-reset"/></svg></button>
     <button class="ib" data-act="audio" type="button" aria-pressed="false" aria-label="Metronoom aan of uit"><svg><use href="#i-off"/></svg></button>
     <button class="ib bt cta" data-act="conn" type="button" aria-label="Verbinden met de roeier"><svg><use href="#i-bt"/></svg><span class="dot"></span></button>
@@ -178,6 +180,10 @@
 </div>
 
 <div class="hint" id="hint"></div>
+
+<!-- Zwevende balk: wordt op dit canvas getekend en als video in Picture-in-Picture gezet -->
+<canvas id="pipCanvas" width="840" height="180" style="position:fixed;left:-9999px;top:0"></canvas>
+<video id="pipVideo" muted playsinline autoplay style="position:fixed;left:0;bottom:0;width:2px;height:2px;opacity:.01;pointer-events:none"></video>
 
 <script>
 (() => {
@@ -267,6 +273,7 @@
     setText('dist', Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL'));
     setText('time', fmtTime(s.elapsed / 1000));
     setText('pace', active && s.pace > 0 && s.pace < 600 ? fmtTime(s.pace) : '-:--');
+    pip.draw(st, active);
   }
 
   function fmtTime(sec) {
@@ -502,6 +509,105 @@
     hint('Demo: er komen nagebootste slagen binnen.');
   }
 
+  // ---------- Zwevende balk (Picture-in-Picture van een canvas) ----------
+  const pip = (() => {
+    const cv = document.getElementById('pipCanvas'), vid = document.getElementById('pipVideo');
+    const g = cv.getContext('2d');
+    const W = cv.width, H = cv.height;
+    const FONT = '-apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif';
+    const HEX = { ok: '#30d158', slow: '#ff9f0a', fast: '#ff453a', idle: '#4a525c' };
+    let ready = false, tickFlip = false;
+
+    function draw(st, active) {
+      if (!g) return;
+      const col = HEX[st.key];
+      g.fillStyle = '#111418'; g.fillRect(0, 0, W, H);
+
+      // Luidspreker
+      g.save(); g.translate(44, H / 2);
+      g.fillStyle = s.audioOn ? HEX.ok : '#7d8793';
+      g.beginPath(); g.moveTo(-14, -9); g.lineTo(-5, -9); g.lineTo(7, -20); g.lineTo(7, 20); g.lineTo(-5, 9); g.lineTo(-14, 9); g.closePath(); g.fill();
+      g.strokeStyle = g.fillStyle; g.lineWidth = 4.5; g.lineCap = 'round';
+      if (s.audioOn) { g.beginPath(); g.arc(9, 0, 11, -0.8, 0.8); g.stroke(); g.beginPath(); g.arc(9, 0, 20, -0.8, 0.8); g.stroke(); }
+      else { g.beginPath(); g.moveTo(16, -8); g.lineTo(30, 8); g.moveTo(30, -8); g.lineTo(16, 8); g.stroke(); }
+      g.restore();
+
+      // Balk met doelgebied
+      const bx = 100, bw = 220, by = H / 2 - 7, bh = 14;
+      const fx = v => bx + frac(v) * bw;
+      const rr = (x, y, w, h, r, c) => { g.fillStyle = c; g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); g.fill(); };
+      rr(bx, by, bw, bh, 7, '#23292f');
+      if (active) rr(bx, by, Math.max(bh, fx(s.spm) - bx), bh, 7, col);
+      rr(fx(s.goal - TOLERANCE), by - 13, fx(s.goal + TOLERANCE) - fx(s.goal - TOLERANCE), 5, 2.5, HEX.ok);
+      g.fillStyle = '#f2f4f6'; g.fillRect(fx(s.goal) - 1.5, by - 16, 3, bh + 32);
+
+      // 26 / 24 SPM
+      let x = 352;
+      g.textBaseline = 'alphabetic';
+      g.font = `700 64px ${FONT}`; g.fillStyle = active ? col : '#7d8793';
+      const t1 = active ? String(Math.round(s.spm)) : '--';
+      g.fillText(t1, x, 112); x += g.measureText(t1).width + 10;
+      g.font = `600 44px ${FONT}`; g.fillStyle = '#7d8793'; g.fillText('/', x, 110); x += g.measureText('/').width + 10;
+      g.font = `700 64px ${FONT}`; g.fillStyle = '#f2f4f6'; g.fillText(String(s.goal), x, 112); x += g.measureText(String(s.goal)).width + 10;
+      g.font = `600 22px ${FONT}`; g.fillStyle = '#7d8793'; g.fillText('SPM', x, 110);
+
+      // Afstand en tijd rechts
+      g.textAlign = 'right';
+      g.font = `650 36px ${FONT}`; g.fillStyle = '#f2f4f6';
+      g.fillText(Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL') + ' m', W - 30, 82);
+      g.font = `500 32px ${FONT}`; g.fillStyle = '#9aa3ad';
+      g.fillText(fmtTime(s.elapsed / 1000), W - 30, 128);
+      g.textAlign = 'left';
+
+      // Klein verschil per beeld, zodat de videostroom altijd nieuwe beelden krijgt
+      tickFlip = !tickFlip; g.fillStyle = tickFlip ? '#111418' : '#121519'; g.fillRect(0, H - 1, 1, 1);
+    }
+
+    function setup() {
+      if (ready) return true;
+      if (!cv.captureStream) return false;
+      vid.srcObject = cv.captureStream(4);
+      vid.play().catch(() => {});
+      ready = true;
+      return true;
+    }
+
+    function isOn() {
+      return document.pictureInPictureElement === vid || vid.webkitPresentationMode === 'picture-in-picture';
+    }
+
+    function setButtons() {
+      const on = isOn();
+      all('[data-act="pip"]').forEach(b => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+    }
+    vid.addEventListener('enterpictureinpicture', setButtons);
+    vid.addEventListener('leavepictureinpicture', setButtons);
+    vid.addEventListener('webkitpresentationmodechanged', setButtons);
+
+    function toggle() {
+      if (!setup()) { hint('Deze browser kan geen zwevende balk maken.'); return; }
+      try {
+        if (isOn()) {
+          if (document.exitPictureInPicture && document.pictureInPictureElement) document.exitPictureInPicture();
+          else if (vid.webkitSetPresentationMode) vid.webkitSetPresentationMode('inline');
+          return;
+        }
+        vid.play().catch(() => {});
+        if (vid.requestPictureInPicture) {
+          vid.requestPictureInPicture().then(setButtons).catch(e => hint('Zwevende balk lukte niet: ' + (e && e.message ? e.message : 'onbekende fout')));
+        } else if (vid.webkitSupportsPresentationMode && vid.webkitSupportsPresentationMode('picture-in-picture')) {
+          vid.webkitSetPresentationMode('picture-in-picture');
+        } else {
+          hint('Deze browser kan geen zwevende balk maken.');
+        }
+      } catch (e) { hint('Zwevende balk lukte niet: ' + e.message); }
+    }
+
+    // Alvast klaarzetten, zodat de knop direct kan starten
+    setup();
+    return { draw, toggle };
+  })();
+
   // ---------- Knoppen ----------
   const actions = {
     minus: () => setGoal(s.goal - 1),
@@ -509,6 +615,7 @@
     reset: resetSession,
     audio: () => setAudio(!s.audioOn),
     demo: toggleDemo,
+    pip: () => pip.toggle(),
     conn: () => { if (wantConnected) { if (confirm('Verbinding met de roeier verbreken?')) disconnect(); } else connect(); }
   };
   document.addEventListener('click', e => {
