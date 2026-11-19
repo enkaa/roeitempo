@@ -57,7 +57,7 @@
         "s1 s1 s2 s2 s3 s3"; }
   }
 
-  .top { grid-area: top; display: flex; justify-content: flex-end; align-items: center; gap: var(--gap); }   /* linksboven vrij voor de vensterknopjes */
+  .top { grid-area: top; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--gap); }   /* linksboven vrij voor de vensterknopjes */
   .tile { background: var(--tile); border-radius: var(--r); padding: clamp(10px, 2.2vmin, 18px); min-width: 0; min-height: 0; position: relative; }
   .lbl { font-size: clamp(10px, 1.7vmin, 13px); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .1em; }
 
@@ -101,6 +101,43 @@
   .chip svg { width: 18px; height: 18px; }
   .chip.on { color: var(--ok); background: rgba(48, 209, 88, .14); }
 
+  .t-doel { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+  .prog { font-size: clamp(12px, 1.9vmin, 14px); color: var(--soft); font-variant-numeric: tabular-nums; }
+  .prog:empty { display: none; }
+
+  /* Paneel voor training, overzicht en eerdere trainingen */
+  .sheet { position: fixed; inset: 0; z-index: 15; background: rgba(5, 6, 8, .72); display: flex; align-items: center; justify-content: center;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  .sheet[hidden] { display: none; }
+  .panel { background: #15191e; border: 1px solid var(--line); border-radius: 20px; width: min(560px, 100%); max-height: 100%; overflow: auto;
+    padding: 20px; display: grid; gap: 14px; -webkit-user-select: none; }
+  .panel h2 { margin: 0; font-size: 20px; }
+  .panel p { margin: 0; color: var(--muted); font-size: 14px; }
+  .panel .sec { display: grid; gap: 8px; }
+  .panel .sec > .lbl { margin-top: 4px; }
+  .choice { display: grid; gap: 2px; text-align: left; padding: 12px 14px; border-radius: 14px; background: var(--raise); border: 2px solid transparent; }
+  .choice b { font-size: 15px; font-weight: 600; }
+  .choice span { font-size: 13px; color: var(--muted); }
+  .choice[aria-pressed="true"] { border-color: var(--blue); }
+  .ed { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #1b2026; }
+  .ed .blk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ed .blk .n { color: var(--muted); font-size: 13px; width: 48px; }
+  .mini { display: inline-flex; align-items: center; gap: 6px; }
+  .mini button { width: 34px; height: 34px; border-radius: 50%; background: var(--raise); font-size: 18px; line-height: 1; }
+  .mini .v { min-width: 4.6em; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
+  .ed .del { margin-left: auto; color: var(--muted); font-size: 13px; padding: 6px 8px; }
+  .btn { height: 46px; border-radius: 12px; background: var(--raise); font-size: 15px; font-weight: 600; padding: 0 16px; }
+  .btn.primary { background: var(--blue); color: #fff; }
+  .btn.wide { width: 100%; }
+  .btns { display: flex; gap: 10px; flex-wrap: wrap; }
+  .btns .btn { flex: 1 1 140px; }
+  .sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .sum div { background: var(--raise); border-radius: 14px; padding: 12px 14px; }
+  .sum .v { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 4px; }
+  .hist { display: grid; gap: 6px; }
+  .hist div { background: var(--raise); border-radius: 12px; padding: 10px 14px; font-size: 14px; display: grid; gap: 2px; }
+  .hist .d { color: var(--muted); font-size: 13px; }
+
   .pipwrap { position: fixed; inset: 0; z-index: 10; background: rgba(11, 13, 16, .94); display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 14px; padding: 16px; text-align: center;
     opacity: 0; pointer-events: none; transition: opacity .2s; }
@@ -128,6 +165,7 @@
 
 <main class="tiles">
   <div class="top">
+    <button class="chip" data-act="training" type="button">Training</button>
     <button class="chip" data-act="demo" type="button" aria-pressed="false">Demo</button>
     <button class="ib" data-act="reset" type="button" aria-label="Afstand en tijd op nul zetten" title="Afstand en tijd op nul zetten"><svg><use href="#i-reset"/></svg></button>
     <button class="chip" data-act="pip" type="button" aria-pressed="false"><svg><use href="#i-pip"/></svg>Zwevende balk</button>
@@ -145,13 +183,16 @@
     <canvas id="ritme" aria-label="Roeiertje dat de slag voordoet op het doeltempo"></canvas>
   </section>
 
-  <section class="tile t-doel row">
-    <div class="lbl">Doel</div>
-    <div class="stepper">
-      <button class="pm" data-act="minus" type="button" aria-label="Doeltempo lager"><svg><use href="#i-minus"/></svg></button>
-      <span class="v num" data-v="goal">24</span>
-      <button class="pm" data-act="plus" type="button" aria-label="Doeltempo hoger"><svg><use href="#i-plus"/></svg></button>
+  <section class="tile t-doel">
+    <div class="row">
+      <div class="lbl">Doel</div>
+      <div class="stepper">
+        <button class="pm" data-act="minus" type="button" aria-label="Doeltempo lager"><svg><use href="#i-minus"/></svg></button>
+        <span class="v num" data-v="goal">24</span>
+        <button class="pm" data-act="plus" type="button" aria-label="Doeltempo hoger"><svg><use href="#i-plus"/></svg></button>
+      </div>
     </div>
+    <div class="prog" data-v="prog"></div>
   </section>
 
   <section class="tile t-metro row">
@@ -164,6 +205,7 @@
   <section class="tile stat s3"><div class="lbl">Per 500 m</div><div class="v num" data-v="pace">-:--</div></section>
 </main>
 
+<div class="sheet" id="sheet" hidden><div class="panel" id="panel" role="dialog" aria-modal="true"></div></div>
 <div class="hint" id="hint"></div>
 
 <!-- Zwevende balk: wordt op dit canvas getekend en als video in Picture-in-Picture gezet -->
@@ -205,8 +247,13 @@
     elapsed: 0,         // ms actieve roeitijd
     lastClock: performance.now(),
     source: null,       // 'ble' | 'demo' | null
-    audioOn: false
+    audioOn: false,
+    flash: null,        // korte melding in de zwevende balk: { text, until }
+    prog: null,         // lopend schema: { name, steps: [{ sec, spm }], start (ms roeitijd), idx }
+    sess: null          // cijfers voor het overzicht na afloop
   };
+  const newSess = () => { s.sess = { startedAt: null, activeMs: 0, onTargetMs: 0, spmMs: 0, strokes: 0 }; };
+  newSess();
 
   function status() {
     if (!s.source) return { key: 'idle', text: 'Niet verbonden' };
@@ -230,6 +277,8 @@
     setText('dist', Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))).toLocaleString('nl-NL'));
     setText('time', fmtTime(s.elapsed / 1000));
     setText('pace', active && s.pace > 0 && s.pace < 600 ? fmtTime(s.pace) : '-:--');
+    const pi = progInfo();
+    setText('prog', pi ? `Blok ${pi.idx + 1} van ${pi.n}, nog ${fmtTime(pi.rem)}` + (pi.next ? `, daarna ${pi.next.spm}` : '') : '');
     pip.draw(st, active);
   }
 
@@ -241,9 +290,17 @@
 
   // Klok: telt alleen door zolang er geroeid wordt
   function clock() {
-    const now = performance.now();
-    if (s.source && s.lastStrokeAt && now - s.lastStrokeAt < IDLE_AFTER_MS) s.elapsed += now - s.lastClock;
+    const now = performance.now(), dt = now - s.lastClock;
+    if (s.source && s.lastStrokeAt && now - s.lastStrokeAt < IDLE_AFTER_MS) {
+      s.elapsed += dt;
+      const ss = s.sess;
+      if (!ss.startedAt) ss.startedAt = new Date().toISOString();
+      ss.activeMs += dt;
+      ss.spmMs += s.spm * dt;
+      if (status().key === 'ok') ss.onTargetMs += dt;
+    }
     s.lastClock = now;
+    progTick();
     render();
   }
   setInterval(clock, 250);
@@ -253,7 +310,7 @@
     const now = performance.now();
     if (strokes != null) {
       // Een nieuwe slag herken je aan een hoger slagenaantal, niet aan elk bericht
-      if (s.strokes !== null && strokes !== s.strokes) s.lastStrokeAt = now;
+      if (s.strokes !== null && strokes !== s.strokes) { s.lastStrokeAt = now; s.sess.strokes += Math.max(1, Math.min(5, strokes - s.strokes)); }
       s.strokes = strokes;
     }
     if (spm != null) s.spm = spm;
@@ -266,16 +323,20 @@
     render();
   }
 
-  function resetSession() {
+  function resetSession(quiet) {
     s.distanceOffset = s.distance;
     s.elapsed = 0;
+    newSess();
+    if (s.prog) s.prog.start = 0;
     if (s.source === 'demo') demo.reset();
     render();
-    hint('Afstand en tijd staan weer op nul.');
+    if (!quiet) hint('Afstand en tijd staan weer op nul.');
   }
 
-  function setGoal(v) {
+  function flash(text) { s.flash = { text, until: performance.now() + 1600 }; }
+  function setGoal(v, note) {
     s.goal = Math.min(GOAL_MAX, Math.max(GOAL_MIN, v));
+    if (note) flash('Doel ' + s.goal);
     store.set('goal', s.goal);
     reanchorBeat();
     metro.retime();
@@ -463,6 +524,8 @@ function drawRower(g, x, y, w, h, ph) {
       s.source = 'ble';
       s.distanceOffset = null;
       s.strokes = null;
+      s.elapsed = 0;
+      newSess();
       await connectGatt();
       keepAwake();
     } catch (e) {
@@ -495,7 +558,7 @@ function drawRower(g, x, y, w, h, ph) {
       timer = setTimeout(stroke, interval * 1000);
     }
     return {
-      start() { t0 = performance.now(); dist = 0; count = 0; s.strokes = 0; s.distanceOffset = 0; s.distance = 0; s.elapsed = 0; stroke(); },
+      start() { t0 = performance.now(); dist = 0; count = 0; s.strokes = 0; s.distanceOffset = 0; s.distance = 0; s.elapsed = 0; newSess(); stroke(); },
       stop() { clearTimeout(timer); timer = null; },
       reset() { dist = 0; s.distance = 0; s.distanceOffset = 0; }
     };
@@ -547,8 +610,24 @@ function drawRower(g, x, y, w, h, ph) {
       g.font = `600 13px ${FONT}`; g.fillStyle = '#c9ced4';
       g.fillText('/ ' + s.goal, x, 33);
 
-      // Midden: het roeiertje
-      drawRower(g, 104, 4, 170, 40, beatPhase());
+      // In de laatste 5 tellen van een blok: het volgende doel
+      const pi = progInfo();
+      if (pi && pi.next && pi.rem <= 5) {
+        x += g.measureText('/ ' + s.goal).width + 4;
+        g.fillStyle = '#30d158'; g.fillText('\u2192 ' + pi.next.spm, x, 33);
+      }
+
+      // Midden: het roeiertje, of even een korte melding (na een knop in het zwevende venster)
+      if (s.flash && performance.now() < s.flash.until) {
+        g.font = `600 15px ${FONT}`; g.fillStyle = '#f2f4f6'; g.textAlign = 'center';
+        g.fillText(s.flash.text, 189, 30); g.textAlign = 'left';
+      } else drawRower(g, 104, 4, 170, 40, beatPhase());
+
+      // Onderin: voortgang van het huidige blok
+      if (pi) {
+        g.fillStyle = '#23292f'; g.fillRect(0, BH - 2, BW, 2);
+        g.fillStyle = '#8a94a1'; g.fillRect(0, BH - 2, BW * pi.frac, 2);
+      }
 
       // Rechts: afstand en tijd
       g.textAlign = 'right';
@@ -634,6 +713,29 @@ function drawRower(g, x, y, w, h, ph) {
     }
     vid.addEventListener('click', start);
 
+    // Knoppen in het zwevende venster: terug/vooruit = doel lager/hoger, spelen/pauze = metronoom
+    let lastToggle = 0;
+    function toggleMetro() {
+      const now = performance.now();
+      if (now - lastToggle < 600) return;   // niet dubbel tellen
+      lastToggle = now;
+      setAudio(!s.audioOn);
+      flash(s.audioOn ? 'Metronoom aan' : 'Metronoom uit');
+      if (vid.paused) vid.play().catch(() => {});
+    }
+    if ('mediaSession' in navigator) {
+      const set = (a, f) => { try { navigator.mediaSession.setActionHandler(a, f); } catch (e) {} };
+      set('seekbackward', () => setGoal(s.goal - 1, true));
+      set('seekforward', () => setGoal(s.goal + 1, true));
+      set('previoustrack', () => setGoal(s.goal - 1, true));
+      set('nexttrack', () => setGoal(s.goal + 1, true));
+      set('play', toggleMetro);
+      set('pause', toggleMetro);
+      try { navigator.mediaSession.metadata = new MediaMetadata({ title: 'Roeitempo' }); } catch (e) {}
+    }
+    // Pauzeert iPadOS de video zelf, dan alsnog de metronoom omzetten en de balk laten doorlopen
+    vid.addEventListener('pause', () => { if (isOn()) toggleMetro(); });
+
     // Alvast klaarzetten, zodat de knop direct kan starten
     setup();
     let lastArgs = null;
@@ -664,20 +766,170 @@ function drawRower(g, x, y, w, h, ph) {
     requestAnimationFrame(frame);
   })();
 
+  // ---------- Schema's ----------
+  const PRESETS = [
+    { id: 'vrij', name: 'Vrij roeien', note: 'Geen schema; je stelt het doel zelf in.', reps: 1, blocks: [] },
+    { id: 'vers', name: 'Rustig met versnellingen', note: '5 keer: 4 minuten op 20, 1 minuut op 26.', reps: 5, blocks: [{ sec: 240, spm: 20 }, { sec: 60, spm: 26 }] },
+    { id: 'pir', name: 'Piramide', note: 'Steeds 2 minuten op 20, 22, 24, 26, 24, 22 en 20.', reps: 1, blocks: [20, 22, 24, 26, 24, 22, 20].map(spm => ({ sec: 120, spm })) },
+    { id: 'fel', name: 'Kort en fel', note: '8 keer: 1 minuut op 28, 1 minuut op 20.', reps: 8, blocks: [{ sec: 60, spm: 28 }, { sec: 60, spm: 20 }] },
+    { id: 'eigen', name: 'Eigen schema', note: 'Stel zelf de blokken samen.', reps: 1, blocks: [] }
+  ];
+  let own = store.get('eigen', { reps: 3, blocks: [{ sec: 180, spm: 22 }, { sec: 60, spm: 26 }] });
+  let picked = store.get('schema', 'vrij');
+
+  const expand = pr => { const out = []; for (let r = 0; r < pr.reps; r++) pr.blocks.forEach(b => out.push({ sec: b.sec, spm: b.spm })); return out; };
+  const presetById = id => id === 'eigen' ? { ...PRESETS[4], reps: own.reps, blocks: own.blocks } : PRESETS.find(p => p.id === id) || PRESETS[0];
+  const totalSec = steps => steps.reduce((a, b) => a + b.sec, 0);
+
+  function progInfo() {
+    const pr = s.prog; if (!pr) return null;
+    const t = Math.max(0, (s.elapsed - pr.start) / 1000);
+    let acc = 0;
+    for (let i = 0; i < pr.steps.length; i++) {
+      const st = pr.steps[i];
+      if (t < acc + st.sec) return { idx: i, n: pr.steps.length, rem: acc + st.sec - t, frac: (t - acc) / st.sec, next: pr.steps[i + 1] || null };
+      acc += st.sec;
+    }
+    return { idx: pr.steps.length, n: pr.steps.length, rem: 0, frac: 1, next: null, done: true };
+  }
+
+  function progTick() {
+    const pi = progInfo(); if (!pi) return;
+    if (pi.done) {
+      s.prog = null;
+      flash('Schema klaar');
+      hint('Het schema is klaar. Tik op Training om de training af te ronden.');
+      return;
+    }
+    if (pi.idx !== s.prog.idx) {
+      s.prog.idx = pi.idx;
+      setGoal(s.prog.steps[pi.idx].spm, true);
+    }
+  }
+
+  function startProg(id) {
+    const pr = presetById(id);
+    picked = id; store.set('schema', id);
+    if (id === 'vrij' || !pr.blocks.length) { s.prog = null; render(); return; }
+    s.prog = { name: pr.name, steps: expand(pr), start: s.elapsed, idx: 0 };
+    setGoal(s.prog.steps[0].spm, true);
+    hint(`Schema ${pr.name} gestart: ${s.prog.steps.length} blokken, samen ${fmtTime(totalSec(s.prog.steps))} roeien.`);
+  }
+
+  // ---------- Overzicht en eerdere trainingen ----------
+  const history = { get: () => store.get('trainingen', []), add(t) { const h = this.get(); h.unshift(t); store.set('trainingen', h.slice(0, 200)); } };
+
+  function summary() {
+    const ss = s.sess, meters = Math.max(0, Math.floor(s.distance - (s.distanceOffset || 0))), sec = s.elapsed / 1000;
+    return {
+      date: ss.startedAt || new Date().toISOString(), meters, sec,
+      spm: ss.activeMs ? ss.spmMs / ss.activeMs : 0,
+      pace: meters > 0 ? sec / meters * 500 : 0,
+      onTarget: ss.activeMs ? Math.round(ss.onTargetMs / ss.activeMs * 100) : 0,
+      strokes: ss.strokes, schema: s.prog ? s.prog.name : (picked !== 'vrij' ? presetById(picked).name : '')
+    };
+  }
+
+  const fmtDate = iso => { try { return new Date(iso).toLocaleString('nl-NL', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+  const nlNum = (v, d = 0) => v.toLocaleString('nl-NL', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+  // ---------- Paneel ----------
+  const sheet = document.getElementById('sheet'), panel = document.getElementById('panel');
+  let view = null, lastSum = null;
+  function openSheet(v) { view = v; sheet.hidden = false; drawSheet(); }
+  function closeSheet() { sheet.hidden = true; view = null; }
+  sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
+
+  function drawSheet() {
+    if (view === 'training') {
+      const running = s.prog ? `<p>Nu bezig: <b>${s.prog.name}</b>, blok ${Math.min(s.prog.idx + 1, s.prog.steps.length)} van ${s.prog.steps.length}.</p>` : '';
+      const editor = picked === 'eigen' ? `<div class="ed">
+          ${own.blocks.map((b, i) => `<div class="blk"><span class="n">Blok ${i + 1}</span>
+            <span class="mini"><button type="button" data-act="ed" data-i="${i}" data-f="sec" data-d="-30" aria-label="Korter">&minus;</button><span class="v">${fmtTime(b.sec)} min</span><button type="button" data-act="ed" data-i="${i}" data-f="sec" data-d="30" aria-label="Langer">+</button></span>
+            <span class="mini"><button type="button" data-act="ed" data-i="${i}" data-f="spm" data-d="-1" aria-label="Lager tempo">&minus;</button><span class="v">${b.spm} slagen</span><button type="button" data-act="ed" data-i="${i}" data-f="spm" data-d="1" aria-label="Hoger tempo">+</button></span>
+            ${own.blocks.length > 1 ? `<button type="button" class="del" data-act="eddel" data-i="${i}">Weghalen</button>` : ''}</div>`).join('')}
+          <div class="blk"><button type="button" class="btn" data-act="edadd">Blok toevoegen</button>
+            <span class="mini" style="margin-left:auto"><span class="n" style="width:auto">Herhalen</span><button type="button" data-act="edreps" data-d="-1" aria-label="Minder keer">&minus;</button><span class="v">${own.reps} keer</span><button type="button" data-act="edreps" data-d="1" aria-label="Meer keer">+</button></span></div>
+          <p>Samen ${fmtTime(totalSec(expand(presetById('eigen'))))} roeien.</p>
+        </div>` : '';
+      panel.innerHTML = `<h2>Training</h2>${running}
+        <div class="sec"><div class="lbl">Schema</div>
+          ${PRESETS.map(p => `<button type="button" class="choice" data-act="pick" data-id="${p.id}" aria-pressed="${picked === p.id}"><b>${p.name}</b><span>${p.note}</span></button>`).join('')}
+          ${editor}
+        </div>
+        <div class="btns">
+          <button type="button" class="btn primary" data-act="progstart">${picked === 'vrij' ? 'Vrij roeien' : 'Schema starten'}</button>
+          ${s.prog ? '<button type="button" class="btn" data-act="progstop">Schema stoppen</button>' : ''}
+        </div>
+        <div class="sec"><div class="lbl">Afronden</div>
+          <p>Rond je de training af, dan zie je een overzicht en wordt de training bewaard op deze iPad. Afstand en tijd gaan daarna weer op nul.</p>
+          <div class="btns"><button type="button" class="btn" data-act="finish">Training afronden</button><button type="button" class="btn" data-act="hist">Eerdere trainingen</button></div>
+        </div>
+        <button type="button" class="btn wide" data-act="sheetclose">Sluiten</button>`;
+    } else if (view === 'summary') {
+      const t = lastSum;
+      panel.innerHTML = `<h2>Training afgerond</h2><p>${fmtDate(t.date)}${t.schema ? ', ' + t.schema : ''}</p>
+        <div class="sum">
+          <div><div class="lbl">Afstand</div><div class="v">${nlNum(t.meters)} m</div></div>
+          <div><div class="lbl">Tijd</div><div class="v">${fmtTime(t.sec)}</div></div>
+          <div><div class="lbl">Gemiddeld tempo</div><div class="v">${nlNum(t.spm, 1)}</div></div>
+          <div><div class="lbl">Gemiddeld per 500 m</div><div class="v">${t.pace ? fmtTime(t.pace) : '-:--'}</div></div>
+          <div><div class="lbl">Op tempo</div><div class="v">${t.onTarget}%</div></div>
+          <div><div class="lbl">Slagen</div><div class="v">${nlNum(t.strokes)}</div></div>
+        </div>
+        <div class="btns"><button type="button" class="btn" data-act="hist">Eerdere trainingen</button><button type="button" class="btn primary" data-act="sheetclose">Klaar</button></div>`;
+    } else if (view === 'hist') {
+      const h = history.get();
+      panel.innerHTML = `<h2>Eerdere trainingen</h2>
+        ${h.length ? `<div class="hist">${h.map(t => `<div><b>${nlNum(t.meters)} m in ${fmtTime(t.sec)}</b><span class="d">${fmtDate(t.date)}, gemiddeld ${nlNum(t.spm, 1)} slagen, ${t.onTarget}% op tempo${t.schema ? ', ' + t.schema : ''}</span></div>`).join('')}</div>`
+          : '<p>Je hebt nog geen trainingen afgerond. Rond een training af via Training, dan staat hij hier.</p>'}
+        <p>Deze lijst staat alleen op deze iPad, in deze browser.</p>
+        <div class="btns"><button type="button" class="btn" data-act="training">Terug</button><button type="button" class="btn primary" data-act="sheetclose">Sluiten</button></div>`;
+    }
+  }
+
+  function finish() {
+    const t = summary();
+    if (t.meters < 10 && t.sec < 30) { hint('Er is nog niet genoeg geroeid om af te ronden.'); return; }
+    history.add(t);
+    lastSum = t;
+    s.prog = null;
+    resetSession(true);
+    openSheet('summary');
+  }
+
+  function editOwn(b) {
+    const i = +b.dataset.i, d = +b.dataset.d, f = b.dataset.f, bl = own.blocks[i];
+    if (f === 'sec') bl.sec = Math.max(30, Math.min(3600, bl.sec + d));
+    else bl.spm = Math.max(GOAL_MIN, Math.min(GOAL_MAX, bl.spm + d));
+    store.set('eigen', own); drawSheet();
+  }
+
   // ---------- Knoppen ----------
   const actions = {
     minus: () => setGoal(s.goal - 1),
     plus: () => setGoal(s.goal + 1),
-    reset: resetSession,
+    reset: () => resetSession(),
     audio: () => setAudio(!s.audioOn),
     demo: toggleDemo,
     pip: () => pip.toggle(),
     pipclose: () => pip.close(),
+    training: () => openSheet('training'),
+    sheetclose: closeSheet,
+    pick: b => { picked = b.dataset.id; drawSheet(); },
+    progstart: () => { startProg(picked); closeSheet(); },
+    progstop: () => { s.prog = null; hint('Schema gestopt. Je roeit nu vrij verder.'); closeSheet(); render(); },
+    finish,
+    hist: () => openSheet('hist'),
+    ed: editOwn,
+    eddel: b => { own.blocks.splice(+b.dataset.i, 1); store.set('eigen', own); drawSheet(); },
+    edadd: () => { const l = own.blocks[own.blocks.length - 1] || { sec: 120, spm: 22 }; own.blocks.push({ sec: l.sec, spm: l.spm }); store.set('eigen', own); drawSheet(); },
+    edreps: b => { own.reps = Math.max(1, Math.min(20, own.reps + +b.dataset.d)); store.set('eigen', own); drawSheet(); },
     conn: () => { if (wantConnected) { if (confirm('Verbinding met de roeier verbreken?')) disconnect(); } else connect(); }
   };
   document.addEventListener('click', e => {
     const b = e.target.closest('[data-act]');
-    if (b && actions[b.dataset.act]) actions[b.dataset.act]();
+    if (b && actions[b.dataset.act]) actions[b.dataset.act](b);
   });
 
   // ---------- Melding ----------
