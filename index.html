@@ -26,6 +26,7 @@
     --r: clamp(12px, 2.4vmin, 20px);
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body, button, .tile { touch-action: manipulation; }   /* geen inzoomen bij snel twee keer tikken */
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
     -webkit-user-select: none; user-select: none; overflow: hidden; }
