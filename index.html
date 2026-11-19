@@ -331,9 +331,23 @@
   function setGoal(v) {
     s.goal = Math.min(GOAL_MAX, Math.max(GOAL_MIN, v));
     store.set('goal', s.goal);
+    reanchorBeat();
     metro.retime();
     render();
   }
+
+  // ---------- Ritmeklok (gedeeld door metronoom en ritme-stip) ----------
+  const beat = { origin: performance.now(), interval: 60000 / s.goal };
+  const beatPhase = (now = performance.now()) => (((now - beat.origin) / beat.interval) % 1 + 1) % 1;
+  function reanchorBeat() {
+    // Nieuw doeltempo: zelfde plek in de slag houden, alleen sneller of langzamer verder
+    const now = performance.now(), ph = beatPhase(now);
+    beat.interval = 60000 / s.goal;
+    beat.origin = now - ph * beat.interval;
+  }
+  // Positie van de ritme-stip: snel heen (haal, 1/3 van de slag), rustig terug (herstel, 2/3)
+  const DRIVE = 1 / 3;
+  const rhythmPos = ph => ph < DRIVE ? ph / DRIVE : 1 - (ph - DRIVE) / (1 - DRIVE);
 
   // ---------- Metronoom (Web Audio) ----------
   const metro = (() => {
@@ -364,26 +378,30 @@
       o.start(t); o.stop(t + 0.15);
     }
 
+    // Tikken op de gedeelde ritmeklok, zodat tik en ritme-stip samenvallen
+    let lastBeat = -1;
     function loop() {
       if (!ctx) return;
-      const interval = 60 / s.goal;
-      while (nextAt < ctx.currentTime + LOOKAHEAD) {
-        if (nextAt < ctx.currentTime) nextAt = ctx.currentTime + 0.02;
+      const now = performance.now();
+      let k = Math.max(lastBeat + 1, Math.ceil((now - beat.origin) / beat.interval));
+      for (;;) {
+        const at = beat.origin + k * beat.interval;
+        if (at > now + LOOKAHEAD * 1000) break;
         const st = status().key;
-        click(nextAt, st === 'slow' || st === 'fast');
-        nextAt += interval;
+        click(ctx.currentTime + Math.max(0.005, (at - now) / 1000), st === 'slow' || st === 'fast');
+        lastBeat = k++;
       }
     }
 
     return {
       start() {
         if (!ensure()) return false;
-        nextAt = ctx.currentTime + 0.05;
+        lastBeat = Math.floor((performance.now() - beat.origin) / beat.interval);
         clearInterval(timer); timer = setInterval(loop, 25); loop();
         return true;
       },
       stop() { clearInterval(timer); timer = null; },
-      retime() { if (timer && ctx) nextAt = Math.min(nextAt, ctx.currentTime + 60 / s.goal); }
+      retime() { lastBeat = Math.floor((performance.now() - beat.origin) / beat.interval); }
     };
   })();
 
@@ -531,6 +549,7 @@
 
     function draw(st, active) {
       if (!g) return;
+      lastArgs = [st, active];
       const col = HEX[st.key];
       g.fillStyle = '#111418'; g.fillRect(0, 0, W, H);
 
@@ -544,13 +563,19 @@
       g.restore();
 
       // Balk met doelgebied
-      const bx = 100, bw = 220, by = H / 2 - 7, bh = 14;
+      const bx = 100, bw = 220, by = H / 2 - 22, bh = 14;
       const fx = v => bx + frac(v) * bw;
       const rr = (x, y, w, h, r, c) => { g.fillStyle = c; g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); g.fill(); };
       rr(bx, by, bw, bh, 7, '#23292f');
       if (active) rr(bx, by, Math.max(bh, fx(s.spm) - bx), bh, 7, col);
       rr(fx(s.goal - TOLERANCE), by - 13, fx(s.goal + TOLERANCE) - fx(s.goal - TOLERANCE), 5, 2.5, HEX.ok);
       g.fillStyle = '#f2f4f6'; g.fillRect(fx(s.goal) - 1.5, by - 16, 3, bh + 32);
+
+      // Ritme-stip: snel naar rechts (haal), rustig terug (herstel); groen bij de inzet
+      const ph = beatPhase(), ry = H / 2 + 38, catchNow = ph < 0.1 || ph > 0.97;
+      rr(bx, ry - 2, bw, 4, 2, '#23292f');
+      g.fillStyle = catchNow ? HEX.ok : '#f2f4f6';
+      g.beginPath(); g.arc(bx + 9 + rhythmPos(ph) * (bw - 18), ry, catchNow ? 11 : 8, 0, Math.PI * 2); g.fill();
 
       // 26 / 24 SPM
       let x = 352;
@@ -577,7 +602,7 @@
     function setup() {
       if (ready) return true;
       if (!cv.captureStream) return false;
-      vid.srcObject = cv.captureStream(4);
+      vid.srcObject = cv.captureStream(20);
       vid.play().catch(() => {});
       ready = true;
       return true;
@@ -646,6 +671,8 @@
 
     // Alvast klaarzetten, zodat de knop direct kan starten
     setup();
+    let lastArgs = null;
+    setInterval(() => { if (lastArgs && isOn()) draw(...lastArgs); }, 50);
     return { draw, toggle, close };
   })();
 
