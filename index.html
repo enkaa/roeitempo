@@ -109,10 +109,17 @@
     font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; }
   .chip svg { width: 18px; height: 18px; }
   .chip.on { color: var(--ok); background: rgba(48, 209, 88, .14); }
+  .chip.go { background: var(--blue); color: #fff; }
+  .top [hidden] { display: none; }
 
   .t-doel { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
   .prog { font-size: clamp(12px, 1.9vmin, 14px); color: var(--soft); font-variant-numeric: tabular-nums; }
   .prog:empty { display: none; }
+  .segs { display: flex; gap: 2px; height: 6px; }
+  .segs:empty { display: none; }
+  .segs span { position: relative; border-radius: 2px; overflow: hidden; min-width: 2px; }
+  .segs span::before { content: ""; position: absolute; inset: 0; background: var(--c); opacity: .28; }
+  .segs i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--c); }
 
   /* Paneel voor training, overzicht en eerdere trainingen */
   .sheet { position: fixed; inset: 0; z-index: 15; background: rgba(5, 6, 8, .72); display: flex; align-items: center; justify-content: center;
@@ -188,8 +195,9 @@
 <main class="tiles">
   <div class="top">
     <button class="chip" data-act="training" type="button">Training</button>
+    <button class="chip go" data-act="finish" type="button" hidden>Afronden</button>
     <button class="chip" data-act="demo" type="button" aria-pressed="false">Demo</button>
-    <button class="ib" data-act="reset" type="button" aria-label="Afstand en tijd op nul zetten" title="Afstand en tijd op nul zetten"><svg><use href="#i-reset"/></svg></button>
+    <button class="ib" data-act="reset" id="resetBtn" type="button" aria-label="Afstand en tijd op nul zetten" title="Afstand en tijd op nul zetten"><svg><use href="#i-reset"/></svg></button>
     <button class="chip pipchip" data-act="pip" type="button" aria-pressed="false" aria-label="Zwevende balk"><svg><use href="#i-pip"/></svg><span class="wide-only">Zwevende balk</span></button>
     <button class="ib bt cta" data-act="conn" type="button" aria-label="Verbinden met de roeier"><svg><use href="#i-bt"/></svg><span class="dot"></span></button>
   </div>
@@ -215,6 +223,7 @@
       </div>
     </div>
     <div class="prog" data-v="prog"></div>
+    <div class="segs" id="segs" aria-hidden="true"></div>
   </section>
 
   <section class="tile t-metro row">
@@ -302,7 +311,30 @@
     setText('pace', active && s.pace > 0 && s.pace < 600 ? fmtTime(s.pace) : '-:--');
     const pi = progInfo();
     setText('prog', pi ? `Blok ${pi.idx + 1} van ${pi.n}, nog ${fmtTime(pi.rem)}.` + (pi.next ? ` Daarna tempo ${pi.next.spm}.` : ' Dit is het laatste blok.') : '');
+    drawSegs(pi);
+    // Is er genoeg geroeid, dan staat Afronden bovenin (in plaats van op nul zetten)
+    const canFinish = meters() >= 10 || s.elapsed >= 30000;
+    const fb = document.querySelector('.top [data-act="finish"]');
+    if (fb.hidden === canFinish) { fb.hidden = !canFinish; $('resetBtn').hidden = canFinish; }
     pip.draw(st, active);
+  }
+
+  // Kleur per blok: rustig = blauw, zwaar = paars (los van groen/oranje/rood, die over je tempo gaan)
+  function segColor(spm, steps) {
+    const lo = Math.min(...steps.map(x => x.spm)), hi = Math.max(...steps.map(x => x.spm));
+    const f = hi > lo ? (spm - lo) / (hi - lo) : 0;
+    const a = [64, 140, 255], b = [191, 90, 242];
+    return `rgb(${a.map((v, i) => Math.round(v + (b[i] - v) * f)).join(',')})`;
+  }
+  let segsFor = null;
+  function drawSegs(pi) {
+    const box = document.getElementById('segs');
+    if (!pi || !s.prog) { if (segsFor) { box.innerHTML = ''; segsFor = null; } return; }
+    if (segsFor !== s.prog) {
+      segsFor = s.prog;
+      box.innerHTML = s.prog.steps.map(x => `<span style="flex:${x.sec} 1 0;--c:${segColor(x.spm, s.prog.steps)}"><i></i></span>`).join('');
+    }
+    [...box.children].forEach((el, i) => { el.firstChild.style.width = (i < pi.idx ? 100 : i === pi.idx ? pi.frac * 100 : 0) + '%'; });
   }
 
   const meters = () => Math.max(0, Math.floor(s.carry + s.distance - (s.distanceOffset || 0)));
@@ -660,10 +692,18 @@ function drawRower(g, x, y, w, h, ph) {
         g.fillText(s.flash.text, 207, 37); g.textAlign = 'left';
       } else drawRower(g, 134, 6, 146, 52, beatPhase());
 
-      // Onderin: voortgang van het huidige blok
+      // Onderin: de hele training in gekleurde stukken (per blok), gedeeld = al geroeid
       if (pi) {
-        g.fillStyle = '#23292f'; g.fillRect(0, BH - 3, BW, 3);
-        g.fillStyle = soon ? '#30d158' : '#8a94a1'; g.fillRect(0, BH - 3, BW * pi.frac, 3);
+        const steps = s.prog.steps, tot = steps.reduce((a, b) => a + b.sec, 0), gap = 1.5;
+        let sx = 0;
+        steps.forEach((st2, i) => {
+          const w = BW * st2.sec / tot, c = segColor(st2.spm, steps), ww = Math.max(1, w - (i < steps.length - 1 ? gap : 0));
+          g.globalAlpha = .28; g.fillStyle = c; g.fillRect(sx, BH - 4, ww, 4);
+          g.globalAlpha = 1;
+          const f = i < pi.idx ? 1 : i === pi.idx ? pi.frac : 0;
+          if (f > 0) g.fillRect(sx, BH - 4, ww * f, 4);
+          sx += w;
+        });
       }
 
       // Rechts: afstand en tijd, met een schema daaronder het blok en de resterende tijd
@@ -709,13 +749,13 @@ function drawRower(g, x, y, w, h, ph) {
     let pending = false;
     const info = () => `(technisch: rs=${vid.readyState} b=${vid.videoWidth} p=${vid.paused ? 1 : 0} api=${vid.webkitSetPresentationMode ? 'wk' : ''}${vid.requestPictureInPicture ? 'std' : ''})`;
 
-    function checkLater() {
+    function checkLater(quiet) {
       setTimeout(() => {
         pending = false;
         setButtons();
         if (isOn()) close();
-        else hint('De zwevende balk kwam niet op gang ' + info());
-      }, 2500);
+        else if (!quiet) hint('De zwevende balk kwam niet op gang ' + info());
+      }, quiet ? 1500 : 2500);
     }
 
     const wrap = document.getElementById('pipWrap');
@@ -730,7 +770,13 @@ function drawRower(g, x, y, w, h, ph) {
         return;
       }
       if (vid.paused) vid.play().catch(() => {});
-      wrap.classList.add('show');
+      // Meteen zichtbaar (zonder overgang) en in dezelfde tik proberen te laten zweven; lukt dat niet, dan blijft de balk staan om op te tikken
+      wrap.style.transition = 'none'; wrap.classList.add('show'); void wrap.offsetWidth; wrap.style.transition = '';
+      if (!pending && vid.readyState >= 1 && vid.webkitSupportsPresentationMode && vid.webkitSupportsPresentationMode('picture-in-picture')) {
+        pending = true;
+        try { vid.webkitSetPresentationMode('picture-in-picture'); } catch (e) {}
+        checkLater(true);
+      }
     }
 
     // Tik op de zichtbare balk: nu echt laten zweven
@@ -754,6 +800,7 @@ function drawRower(g, x, y, w, h, ph) {
       } catch (e) { pending = false; hint('Zwevende balk lukte niet: ' + e.message + ' ' + info()); }
     }
     vid.addEventListener('click', start);
+    setup();   // video alvast laten lopen, zodat één tik genoeg kan zijn
 
     // Knoppen in het zwevende venster: terug/vooruit = doel lager/hoger, spelen/pauze = metronoom
     let lastToggle = 0;
@@ -820,19 +867,37 @@ function drawRower(g, x, y, w, h, ph) {
   if (!own.parts) own = { parts: [{ reps: own.reps || 1, blocks: own.blocks || [] }] };   // oude opslag
   const saveOwn = () => store.set('eigen', own);
   let picked = store.get('schema', 'vrij');
+  if (picked === 'plan' && !store.get('plan', null)) picked = 'vrij';
 
   const partsOf = pr => pr.parts || [{ reps: pr.reps, blocks: pr.blocks }];
   const expand = pr => { const out = []; partsOf(pr).forEach(pt => { for (let r = 0; r < pt.reps; r++) pt.blocks.forEach(b => out.push({ sec: b.sec, spm: b.spm })); }); return out; };
-  const presetById = id => id === 'eigen' ? { ...PRESETS[4], parts: own.parts } : PRESETS.find(p => p.id === id) || PRESETS[0];
+  let plan = store.get('plan', null);   // { sessions: [{ title, parts }], next, done: [index] }
+  const savePlan = () => store.set('plan', plan);
+  const planName = i => `Training ${i + 1} van ${plan.sessions.length}`;
+  const presetById = id => id === 'eigen' ? { ...PRESETS[4], parts: own.parts }
+    : id === 'plan' && plan ? { id: 'plan', name: planName(plan.next), parts: plan.sessions[plan.next].parts }
+    : PRESETS.find(p => p.id === id) || PRESETS[0];
 
   // Schema als tekst: elke regel een deel, bv. "5 min op 20" of "5 keer: 4 min op 22, 1 min op 26"
+  // Elke regel met een tijd is een deel; een regel zonder tijd (bv. "Training 3") begint een nieuwe training
+  const HASTIME = /\d+:\d{2}|\d\s*(?:minuten|minuut|min|m(?![a-z])|'|seconden|sec|s(?![a-z])|")/;
   function parseSchema(text) {
-    const parts = [], bad = [];
+    const sessions = [], bad = [];
+    let cur = null, newNext = false;
+    const open = title => {
+      if (cur && !cur.parts.length && title) { cur.title = cur.title ? cur.title + ', ' + title : title; return; }   // "Week 2" + "Training 1"
+      cur = { title, parts: [] }; sessions.push(cur);
+    };
     text.split(/\n/).forEach((raw, li) => {
-      let line = raw.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s+/, '').trim().toLowerCase();   // opsommingstekens weg
-      if (!line) return;
+      const clean = raw.replace(/^\s*(?:[-*•#]+|\d+[.)])\s+/, '').replace(/\*\*/g, '').trim();   // opsommingstekens en vet weg
+      if (!clean) { if (cur && cur.parts.length) newNext = true; return; }
+      let line = clean.toLowerCase();
+      if (!HASTIME.test(line)) { open(clean.replace(/[:\s]+$/, '').slice(0, 60)); newNext = false; return; }
+      const hm = line.match(/^((?:training|sessie|dag|workout|les|week)\s*\d+[^:]*?)\s*[:–-]\s+/);
+      if (hm) { if (cur && cur.parts.length) cur = null; open(clean.slice(0, hm[1].length)); newNext = false; line = line.slice(hm[0].length); }
+      if (!cur || newNext) { cur = null; open(''); newNext = false; }
       let reps = 1;
-      const rm = line.match(/^(\d+)\s*(?:x|\u00d7|keer|maal)\s*:?\s*/);
+      const rm = line.match(/^(\d+)\s*(?:x|×|keer|maal)\s*:?\s*/);
       if (rm) { reps = +rm[1]; line = line.slice(rm[0].length); }
       line = line.replace(/^\(|\)$/g, '');
       const blocks = [];
@@ -848,10 +913,11 @@ function drawRower(g, x, y, w, h, ph) {
         if (!sec || !spm || spm < GOAL_MIN || spm > GOAL_MAX || sec > 3600) { ok = false; return; }
         blocks.push({ sec, spm });
       });
-      if (!ok || !blocks.length || reps < 1 || reps > 30) bad.push({ n: li + 1, line: raw.trim() });
-      else parts.push({ reps, blocks });
+      if (!ok || !blocks.length || reps < 1 || reps > 30) bad.push(`Regel ${li + 1} begrijp ik niet: ${raw.trim()}`);
+      else cur.parts.push({ reps, blocks });
     });
-    return { parts, bad };
+    const skip = sessions.filter(se => !se.parts.length).map(se => se.title);   // losse tekst zonder tijd, bv. een opmerking
+    return { sessions: sessions.filter(se => se.parts.length), bad, skip };
   }
   const describePart = pt => (pt.reps > 1 ? `${pt.reps} keer: ` : '') + pt.blocks.map(b => `${fmtTime(b.sec)} min op ${b.spm}`).join(', ');
   const totalSec = steps => steps.reduce((a, b) => a + b.sec, 0);
@@ -871,9 +937,15 @@ function drawRower(g, x, y, w, h, ph) {
   function progTick() {
     const pi = progInfo(); if (!pi) return;
     if (pi.done) {
+      const pr = s.prog;
       s.prog = null;
       flash('Schema klaar');
-      hint('Het schema is klaar. Tik op Training om de training af te ronden.');
+      if (pr.id === 'plan' && plan && pr.planIdx < plan.sessions.length) {
+        if (!plan.done.includes(pr.planIdx)) plan.done.push(pr.planIdx);
+        const all = plan.done.length >= plan.sessions.length;
+        plan.next = Math.min(plan.sessions.length - 1, pr.planIdx + 1); savePlan();
+        hint(all ? 'Je hebt alle trainingen van het plan gedaan. Tik op Afronden om de training te bewaren.' : `${planName(pr.planIdx)} is klaar. Tik op Afronden om hem te bewaren; de volgende keer staat training ${pr.planIdx + 2} klaar.`);
+      } else hint('Het schema is klaar. Tik op Afronden om de training te bewaren.');
       return;
     }
     if (pi.idx !== s.prog.idx) {
@@ -887,9 +959,9 @@ function drawRower(g, x, y, w, h, ph) {
     picked = id; store.set('schema', id);
     const steps = expand(pr);
     if (id === 'vrij' || !steps.length) { s.prog = null; render(); return; }
-    s.prog = { id, name: pr.name, steps, start: s.elapsed, idx: 0 };
+    s.prog = { id, name: pr.name, steps, start: s.elapsed, idx: 0, planIdx: id === 'plan' ? plan.next : null };
     setGoal(s.prog.steps[0].spm, true);
-    hint(`${id === 'eigen' ? 'Je eigen schema' : 'Schema ' + pr.name} is gestart: ${s.prog.steps.length} blokken, samen ${fmtTime(totalSec(s.prog.steps))} roeien.`);
+    hint(`${id === 'eigen' ? 'Je eigen schema' : id === 'plan' ? pr.name : 'Schema ' + pr.name} is gestart: ${s.prog.steps.length} blokken, samen ${fmtTime(totalSec(s.prog.steps))} roeien.`);
   }
 
   // ---------- Overzicht en eerdere trainingen ----------
@@ -929,46 +1001,58 @@ function drawRower(g, x, y, w, h, ph) {
             <div class="partfoot"><button type="button" class="btn small" data-act="edadd" data-p="${pi}">Blok toevoegen</button>
               <span class="mini"><button type="button" data-act="edreps" data-p="${pi}" data-d="-1" aria-label="Minder keer">&minus;</button><span class="v">${pt.reps} keer</span><button type="button" data-act="edreps" data-p="${pi}" data-d="1" aria-label="Meer keer">+</button></span></div>
           </div>`).join('')}
-          <div class="btns"><button type="button" class="btn small" data-act="edpart">Deel toevoegen</button><button type="button" class="btn small" data-act="paste">Schema plakken</button></div>
+          <div class="btns"><button type="button" class="btn small" data-act="edpart">Deel toevoegen</button></div>
           <p>Elk deel roei je het aantal keer dat erbij staat, daarna begint het volgende deel. Zo kun je bijvoorbeeld inroeien, dan herhalen en daarna uitroeien. Samen ${fmtTime(totalSec(expand(presetById('eigen'))))} roeien.</p>
         </div>` : '';
-      const again = s.prog && s.prog.id === picked;
+      const planChoice = plan ? `<button type="button" class="choice" data-act="pick" data-id="plan" aria-pressed="${picked === 'plan'}"><b>Plan: ${planName(plan.next).toLowerCase()}</b><span>${plan.sessions[plan.next].title && !/^(training|sessie|dag|workout|les)\s*\d+$/i.test(plan.sessions[plan.next].title) ? plan.sessions[plan.next].title + '. ' : ''}${plan.sessions[plan.next].parts.map(describePart).join('; ')}</span></button>` : '';
+      const planBox = plan && picked === 'plan' ? `<div class="ed">
+          <div class="partfoot"><span>Je hebt ${plan.done.length} van de ${plan.sessions.length} trainingen gedaan.</span>
+            <span class="mini"><button type="button" data-act="plannav" data-d="-1" aria-label="Vorige training">&minus;</button><span class="v">Training ${plan.next + 1}${plan.done.includes(plan.next) ? ' (gedaan)' : ''}</span><button type="button" data-act="plannav" data-d="1" aria-label="Volgende training">+</button></span></div>
+          <p>Is een training uit het plan helemaal geroeid, dan staat de volgende vanzelf klaar. Met min en plus kies je zelf een andere.</p>
+          <div class="btns"><button type="button" class="btn small" data-act="plandel">Plan weghalen</button></div>
+        </div>` : '';
+      const again = s.prog && s.prog.id === picked && (picked !== 'plan' || s.prog.planIdx === plan.next);
       panel.innerHTML = `<h2>Training</h2>${running}
         <div class="sec"><div class="lbl">Schema</div>
+          ${planChoice}${planBox}
           ${PRESETS.map(p => `<button type="button" class="choice" data-act="pick" data-id="${p.id}" aria-pressed="${picked === p.id}"><b>${p.name}</b><span>${p.note}</span></button>`).join('')}
           ${editor}
+          <button type="button" class="btn" data-act="paste">Schema of plan plakken</button>
         </div>
         <div class="sec"><div class="lbl">Afronden</div>
-          <p>Rond je de training af, dan zie je een overzicht en wordt de training bewaard op dit apparaat. Afstand en tijd gaan daarna weer op nul.</p>
+          <p>Rond je de training af, dan zie je een overzicht en wordt de training bewaard op dit apparaat. Afstand en tijd gaan daarna weer op nul. Dat kan ook met de blauwe knop Afronden bovenin.</p>
           <div class="btns"><button type="button" class="btn" data-act="finish">Training afronden</button><button type="button" class="btn" data-act="hist">Eerdere trainingen</button></div>
+          <button type="button" class="btn small" data-act="zero">Op nul zetten zonder te bewaren</button>
         </div>
         <div class="btns foot">
           <button type="button" class="btn primary" data-act="progstart">${picked === 'vrij' ? 'Vrij roeien' : again ? 'Opnieuw beginnen' : 'Schema starten'}</button>
           <button type="button" class="btn" data-act="sheetclose">Sluiten</button>
         </div>`;
     } else if (view === 'paste') {
-      const r = parseSchema(pasteText);
-      const readout = pasteText.trim() ? `<div class="readout">${r.parts.map(pt => `<div>${describePart(pt)}</div>`).join('')}
-          ${r.bad.map(b => `<div class="bad">Regel ${b.n} begrijp ik niet: ${b.line.replace(/</g, '&lt;')}</div>`).join('')}
-          ${r.parts.length ? `<div>Samen ${fmtTime(totalSec(expand({ parts: r.parts })))} roeien.</div>` : ''}</div>` : '';
-      panel.innerHTML = `<h2>Schema plakken</h2>
+      panel.innerHTML = `<h2>Schema of plan plakken</h2>
         <p>Zet elk deel op een eigen regel, met de tijd en het tempo in slagen per minuut. Wil je een deel een paar keer herhalen, zet dan het aantal keer ervoor. Bijvoorbeeld:</p>
         <pre>5 min op 20
 5 keer: 4 min op 22, 1 min op 26
 5 min op 18</pre>
-        <p>Laat je een schema maken, vraag dan om het in deze vorm. Afstanden (zoals 500 m) werken nog niet, alleen tijden.</p>
+        <p>Wil je een heel plan in een keer invoeren, bijvoorbeeld 20 trainingen, zet dan boven elke training een regel met alleen de naam, zoals Training 1. De app onthoudt welke training de volgende is. Afstanden (zoals 500 m) werken nog niet, alleen tijden.</p>
         <textarea id="pasteBox" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Plak of typ hier je schema">${pasteText.replace(/</g, '&lt;')}</textarea>
-        <div class="sec"><div class="lbl">Zo lees ik het</div><div id="readout">${readout || '<p>Nog niets ingevuld.</p>'}</div></div>
+        <div class="sec"><div class="lbl">Zo lees ik het</div><div id="readout"></div></div>
         <div class="btns foot">
-          <button type="button" class="btn primary" data-act="pastesave">Bewaren als eigen schema</button>
+          <button type="button" class="btn primary" data-act="pastesave" id="pasteSave">Bewaren</button>
           <button type="button" class="btn" data-act="training">Terug</button>
         </div>`;
       const box = document.getElementById('pasteBox');
-      box.addEventListener('input', () => {
-        pasteText = box.value;
-        const rr = parseSchema(pasteText), ro = document.getElementById('readout');
-        ro.innerHTML = pasteText.trim() ? `<div class="readout">${rr.parts.map(pt => `<div>${describePart(pt)}</div>`).join('')}${rr.bad.map(b => `<div class="bad">Regel ${b.n} begrijp ik niet: ${b.line.replace(/</g, '&lt;')}</div>`).join('')}${rr.parts.length ? `<div>Samen ${fmtTime(totalSec(expand({ parts: rr.parts })))} roeien.</div>` : ''}</div>` : '<p>Nog niets ingevuld.</p>';
-      });
+      const show = () => {
+        const r = parseSchema(pasteText), ro = document.getElementById('readout'), many = r.sessions.length > 1, esc = x => x.replace(/</g, '&lt;');
+        ro.innerHTML = !pasteText.trim() ? '<p>Nog niets ingevuld.</p>' : `<div class="readout">
+          ${r.sessions.map((se, i) => `<div>${many ? `<b>${esc(se.title || 'Training ' + (i + 1))}</b> (${fmtTime(totalSec(expand(se)))}): ` : ''}${se.parts.map(describePart).join('; ')}</div>`).join('')}
+          ${r.bad.map(b => `<div class="bad">${esc(b)}</div>`).join('')}
+          ${r.skip.length ? `<p>Deze tekst sla ik over, want er staat geen tijd in: ${esc(r.skip.join('; '))}</p>` : ''}
+          ${r.sessions.length === 1 ? `<div>Samen ${fmtTime(totalSec(expand(r.sessions[0])))} roeien.</div>` : ''}</div>`;
+        document.getElementById('pasteSave').textContent = many ? `Bewaren als plan van ${r.sessions.length} trainingen` : 'Bewaren als eigen schema';
+      };
+      box.addEventListener('input', () => { pasteText = box.value; show(); });
+      show();
     } else if (view === 'summary') {
       const t = lastSum;
       panel.innerHTML = `<h2>Training afgerond</h2><p>${fmtDate(t.date)}${t.schema ? ', ' + t.schema : ''}</p>
@@ -1023,6 +1107,7 @@ function drawRower(g, x, y, w, h, ph) {
     minus: () => setGoal(s.goal - 1),
     plus: () => setGoal(s.goal + 1),
     reset: () => resetSession(),
+    zero: () => { if (confirm('Afstand en tijd op nul zetten? Deze training wordt dan niet bewaard.')) { s.prog = null; resetSession(); closeSheet(); } },
     audio: () => setAudio(!s.audioOn),
     demo: toggleDemo,
     pip: () => pip.toggle(),
@@ -1039,12 +1124,22 @@ function drawRower(g, x, y, w, h, ph) {
     edadd: b => keepScroll(() => { const pt = own.parts[+b.dataset.p], l = pt.blocks[pt.blocks.length - 1] || { sec: 120, spm: 22 }; pt.blocks.push({ sec: l.sec, spm: l.spm }); saveOwn(); }),
     edreps: b => keepScroll(() => { const pt = own.parts[+b.dataset.p]; pt.reps = Math.max(1, Math.min(30, pt.reps + +b.dataset.d)); saveOwn(); }),
     edpart: () => keepScroll(() => { own.parts.push({ reps: 1, blocks: [{ sec: 300, spm: 20 }] }); saveOwn(); }),
-    paste: () => { pasteText = own.parts.map(describePart).join('\n'); openSheet('paste'); },
+    paste: () => {
+      pasteText = picked === 'plan' && plan ? plan.sessions.map((se, i) => (se.title || 'Training ' + (i + 1)) + '\n' + se.parts.map(describePart).join('\n')).join('\n\n') : own.parts.map(describePart).join('\n');
+      openSheet('paste');
+    },
     pastesave: () => {
       const r = parseSchema(pasteText);
-      if (r.bad.length || !r.parts.length) { hint(r.parts.length ? 'Pas eerst de regels aan die ik niet begrijp.' : 'Er staat nog geen schema in.'); return; }
-      own = { parts: r.parts }; saveOwn(); picked = 'eigen'; store.set('schema', 'eigen'); openSheet('training');
+      if (r.bad.length || !r.sessions.length) { hint(r.sessions.length ? 'Pas eerst de regels aan die ik niet begrijp.' : 'Er staat nog geen schema in.'); return; }
+      if (r.sessions.length === 1) { own = { parts: r.sessions[0].parts }; saveOwn(); picked = 'eigen'; }
+      else {
+        if (plan && plan.done.length && !confirm(`Je huidige plan vervangen? Je hebt daarvan ${plan.done.length} trainingen gedaan.`)) return;
+        plan = { sessions: r.sessions, next: 0, done: [] }; savePlan(); picked = 'plan';
+      }
+      store.set('schema', picked); openSheet('training');
     },
+    plannav: b => keepScroll(() => { plan.next = Math.max(0, Math.min(plan.sessions.length - 1, plan.next + +b.dataset.d)); savePlan(); }),
+    plandel: () => { if (!confirm('Het plan weghalen? Je eerdere trainingen blijven bewaard.')) return; plan = null; store.set('plan', null); if (s.prog && s.prog.id === 'plan') s.prog = null; picked = 'vrij'; store.set('schema', 'vrij'); drawSheet(); render(); },
     conn: () => { if (wantConnected) { if (confirm('Verbinding met de roeier verbreken?')) disconnect(); } else connect(); }
   };
   document.addEventListener('click', e => {
