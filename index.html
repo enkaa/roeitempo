@@ -1137,6 +1137,10 @@ function drawRower(g, x, y, w, h, ph) {
         </div>
         ${roeierSection()}
         ${recSection()}
+        <div class="sec"><div class="lbl">Apple Gezondheid</div>
+          <div class="row"><p>Na Bewaren meteen naar Gezondheid</p><button class="switch" data-act="gztoggle" type="button" role="switch" aria-checked="${store.get('gezondheid', false)}" aria-label="Na Bewaren meteen naar Gezondheid"></button></div>
+          <p>Dit gebruikt de opdracht ${SHORTCUT} in de app Opdrachten. Maak die eerst één keer aan. Staat dit aan, dan opent na Bewaren de app Opdrachten en zet hij de training in Gezondheid.</p>
+        </div>
         <div class="sec"><div class="lbl">Demo</div>
           <div class="row"><p>Nagebootste slagen, om alles uit te proberen zonder te roeien.</p><button class="switch" data-act="demo" type="button" role="switch" aria-checked="${s.source === 'demo'}" aria-label="Demo"></button></div>
         </div>
@@ -1179,13 +1183,13 @@ function drawRower(g, x, y, w, h, ph) {
         </div>
         ${asking ? `<p>Bewaar je de training, dan staat hij bij Eerdere trainingen. In beide gevallen gaan afstand en tijd daarna weer op nul. Sluit je dit venster, dan roei je gewoon verder met deze training.</p>
         <div class="btns"><button type="button" class="btn" data-act="nosave">Niet bewaren</button><button type="button" class="btn primary" data-act="save">Bewaren</button></div>`
-        : `<div class="btns"><button type="button" class="btn" data-act="fit" data-i="last">Naar HealthFit</button><button type="button" class="btn" data-act="hist">Eerdere trainingen</button><button type="button" class="btn primary" data-act="sheetclose">Klaar</button></div>`}`;
+        : `<div class="btns">${store.get('gezondheid', false) ? '' : '<button type="button" class="btn" data-act="health" data-i="last">Naar Gezondheid</button>'}<button type="button" class="btn" data-act="hist">Eerdere trainingen</button><button type="button" class="btn primary" data-act="sheetclose">Klaar</button></div>`}`;
     } else if (view === 'hist') {
       const h = history.get();
       panel.innerHTML = `<h2>Eerdere trainingen</h2>
-        ${h.length ? `<div class="hist">${h.map((t, i) => `<div><b>${nlNum(t.meters)} m in ${fmtTime(t.sec)}</b><span class="d">${fmtDate(t.date)}, gemiddeld ${nlNum(t.spm, 1)} slagen, ${t.onTarget}% op tempo${t.schema ? ', ' + t.schema : ''}</span><span class="acts"><button type="button" class="del fit" data-act="fit" data-i="${i}">${t.fit ? 'Nog een keer naar HealthFit' : 'Naar HealthFit'}</button><button type="button" class="del" data-act="histdel" data-i="${i}">Weghalen</button></span></div>`).join('')}</div>`
+        ${h.length ? `<div class="hist">${h.map((t, i) => `<div><b>${nlNum(t.meters)} m in ${fmtTime(t.sec)}</b><span class="d">${fmtDate(t.date)}, gemiddeld ${nlNum(t.spm, 1)} slagen, ${t.onTarget}% op tempo${t.schema ? ', ' + t.schema : ''}</span><span class="acts"><button type="button" class="del fit" data-act="health" data-i="${i}">${t.gz ? 'Nog een keer naar Gezondheid' : 'Naar Gezondheid'}</button><button type="button" class="del" data-act="fit" data-i="${i}">FIT-bestand</button><button type="button" class="del" data-act="histdel" data-i="${i}">Weghalen</button></span></div>`).join('')}</div>`
           : '<p>Je hebt nog geen trainingen bewaard. Rond een training af met de blauwe knop Afronden bovenin, dan staat hij hier.</p>'}
-        <p>Deze lijst staat alleen op dit apparaat, in deze browser. Met Naar HealthFit deel je een training als bestand: kies HealthFit in het deelmenu, of bewaar het bestand in de map die HealthFit leest in Dropbox of Google Drive. HealthFit zet de training dan als roeitraining in Apple Gezondheid.</p>
+        <p>Deze lijst staat alleen op dit apparaat, in deze browser. Naar Gezondheid zet een training via de app Opdrachten in Apple Gezondheid. FIT-bestand deelt de training als bestand, bijvoorbeeld voor HealthFit of Strava.</p>
         <div class="btns"><button type="button" class="btn" data-act="settings">Terug</button><button type="button" class="btn primary" data-act="sheetclose">Sluiten</button></div>`;
     }
   }
@@ -1228,6 +1232,27 @@ function drawRower(g, x, y, w, h, ph) {
     }
     return crc;
   }
+  // Vermogen en calorieën volgens Concept2 (begrensd)
+  function stats(t) {
+    const speed = t.sec > 0 ? t.meters / t.sec : 0;
+    const watts = Math.min(1500, 2.8 * speed ** 3);
+    return { speed, watts, kcal: (4 * 0.8604 * watts + 300) * t.sec / 3600 };
+  }
+  // Naar Apple Gezondheid via de opdracht "Roeitraining" in de app Opdrachten (Shortcuts)
+  const SHORTCUT = 'Roeitraining';
+  function toHealth(t, idx) {
+    if (!t) return;
+    const d = new Date(t.date), z = n => String(n).padStart(2, '0');
+    const p = {
+      start: `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`,
+      minuten: Math.round(t.sec / 6) / 10, meters: Math.round(t.meters), kcal: Math.round(stats(t).kcal),
+      slagen: t.strokes, tempo: Math.round(t.spm * 10) / 10
+    };
+    const h = history.get(), i = idx === 'last' ? h.findIndex(x => x.date === t.date) : +idx;
+    if (h[i]) { h[i].gz = true; store.set('trainingen', h); }
+    location.href = `shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT)}&input=text&text=${encodeURIComponent(JSON.stringify(p))}`;
+  }
+
   function fitFile(t) {
     const SIZE = { 0x00: 1, 0x02: 1, 0x84: 2, 0x86: 4, 0x8C: 4 };
     const out = [];
@@ -1244,9 +1269,7 @@ function drawRower(g, x, y, w, h, ph) {
     const start = new Date(t.date).getTime(), end = start + t.sec * 1000;
     const fitTime = ms => Math.floor(ms / 1000) - 631065600;   // seconden sinds 31 dec 1989
     const ts0 = fitTime(start), ts1 = fitTime(end);
-    const speed = t.sec > 0 ? t.meters / t.sec : 0;
-    const watts = Math.min(1500, 2.8 * speed ** 3);              // zelfde verband als Concept2 (begrensd)
-    const kcal = (4 * 0.8604 * watts + 300) * t.sec / 3600;
+    const { speed, watts, kcal } = stats(t);
     const ENUM = 0x00, U8 = 0x02, U16 = 0x84, U32 = 0x86, U32Z = 0x8C;
     msg(0, [[0, ENUM, 4], [1, U16, 255], [2, U16, 1], [3, U32Z, 30], [4, U32, ts0]]);                       // file_id: activiteit
     msg(21, [[253, U32, ts0], [0, ENUM, 0], [1, ENUM, 0]]);                                                  // event: start
@@ -1294,7 +1317,10 @@ function drawRower(g, x, y, w, h, ph) {
   }
   function endTraining(keep) {
     const t = summary();   // opnieuw, want er kan nog geroeid zijn terwijl de vraag openstond
-    if (keep) { history.add(t); t.saved = true; lastSum = t; }
+    if (keep) {
+      history.add(t); t.saved = true; lastSum = t;
+      if (store.get('gezondheid', false)) setTimeout(() => toHealth(t, 'last'), 700);
+    }
     s.prog = null;
     resetSession(true);
     if (keep) drawSheet();
@@ -1328,6 +1354,8 @@ function drawRower(g, x, y, w, h, ph) {
     finish,
     stand: b => keepScroll(() => { stand = Math.max(1, Math.min(8, stand + +b.dataset.d)); store.set('stand', stand); sendSettings(); }),
     ijk: b => keepScroll(() => { ijk = Math.max(0.5, Math.min(2, Math.round((ijk + 0.05 * +b.dataset.d) * 100) / 100)); store.set('ijk', ijk); sendSettings(); }),
+    health: b => toHealth(b.dataset.i === 'last' ? lastSum : history.get()[+b.dataset.i], b.dataset.i),
+    gztoggle: b => { const on = !store.get('gezondheid', false); store.set('gezondheid', on); b.setAttribute('aria-checked', String(on)); },
     fit: b => shareFit(b.dataset.i === 'last' ? lastSum : history.get()[+b.dataset.i], b.dataset.i),
     recstart: async () => {
       rec.err = '';
