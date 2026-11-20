@@ -165,6 +165,7 @@
   .hist { display: grid; gap: 6px; }
   .hist div { background: var(--raise); border-radius: 12px; padding: 10px 14px; font-size: 14px; display: grid; gap: 2px; }
   .hist .d { color: var(--muted); font-size: 13px; }
+  .hist .del { justify-self: start; color: var(--muted); font-size: 13px; padding: 4px 0 0; }
 
   .pipwrap { position: fixed; inset: 0; z-index: 10; background: rgba(11, 13, 16, .94); display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 14px; padding: 16px; text-align: center;
@@ -965,7 +966,8 @@ function drawRower(g, x, y, w, h, ph) {
   }
 
   // ---------- Overzicht en eerdere trainingen ----------
-  const history = { get: () => store.get('trainingen', []), add(t) { const h = this.get(); h.unshift(t); store.set('trainingen', h.slice(0, 200)); } };
+  const history = { get: () => store.get('trainingen', []), add(t) { const h = this.get(); h.unshift(t); store.set('trainingen', h.slice(0, 200)); },
+    del(i) { const h = this.get(); h.splice(i, 1); store.set('trainingen', h); } };
 
   function summary() {
     const ss = s.sess, m = meters(), sec = s.elapsed / 1000;
@@ -1020,7 +1022,7 @@ function drawRower(g, x, y, w, h, ph) {
           <button type="button" class="btn" data-act="paste">Schema of plan plakken</button>
         </div>
         <div class="sec"><div class="lbl">Afronden</div>
-          <p>Rond je de training af, dan zie je een overzicht en wordt de training bewaard op dit apparaat. Afstand en tijd gaan daarna weer op nul. Dat kan ook met de blauwe knop Afronden bovenin.</p>
+          <p>Rond je de training af, dan zie je een overzicht en kies je of je hem bewaart op dit apparaat. Afstand en tijd gaan daarna weer op nul. Dat kan ook met de blauwe knop Afronden bovenin.</p>
           <div class="btns"><button type="button" class="btn" data-act="finish">Training afronden</button><button type="button" class="btn" data-act="hist">Eerdere trainingen</button></div>
           <button type="button" class="btn small" data-act="zero">Op nul zetten zonder te bewaren</button>
         </div>
@@ -1054,8 +1056,8 @@ function drawRower(g, x, y, w, h, ph) {
       box.addEventListener('input', () => { pasteText = box.value; show(); });
       show();
     } else if (view === 'summary') {
-      const t = lastSum;
-      panel.innerHTML = `<h2>Training afgerond</h2><p>${fmtDate(t.date)}${t.schema ? ', ' + t.schema : ''}</p>
+      const t = lastSum, asking = !t.saved;
+      panel.innerHTML = `<h2>${asking ? 'Training bewaren?' : 'Training bewaard'}</h2><p>${fmtDate(t.date)}${t.schema ? ', ' + t.schema : ''}</p>
         <div class="sum">
           <div><div class="lbl">Afstand</div><div class="v">${nlNum(t.meters)} m</div></div>
           <div><div class="lbl">Tijd</div><div class="v">${fmtTime(t.sec)}</div></div>
@@ -1064,11 +1066,13 @@ function drawRower(g, x, y, w, h, ph) {
           <div><div class="lbl">Op tempo</div><div class="v">${t.onTarget}%</div></div>
           <div><div class="lbl">Slagen</div><div class="v">${nlNum(t.strokes)}</div></div>
         </div>
-        <div class="btns"><button type="button" class="btn" data-act="hist">Eerdere trainingen</button><button type="button" class="btn primary" data-act="sheetclose">Klaar</button></div>`;
+        ${asking ? `<p>Bewaar je de training, dan staat hij bij Eerdere trainingen. In beide gevallen gaan afstand en tijd daarna weer op nul. Sluit je dit venster, dan roei je gewoon verder met deze training.</p>
+        <div class="btns"><button type="button" class="btn" data-act="nosave">Niet bewaren</button><button type="button" class="btn primary" data-act="save">Bewaren</button></div>`
+        : `<div class="btns"><button type="button" class="btn" data-act="hist">Eerdere trainingen</button><button type="button" class="btn primary" data-act="sheetclose">Klaar</button></div>`}`;
     } else if (view === 'hist') {
       const h = history.get();
       panel.innerHTML = `<h2>Eerdere trainingen</h2>
-        ${h.length ? `<div class="hist">${h.map(t => `<div><b>${nlNum(t.meters)} m in ${fmtTime(t.sec)}</b><span class="d">${fmtDate(t.date)}, gemiddeld ${nlNum(t.spm, 1)} slagen, ${t.onTarget}% op tempo${t.schema ? ', ' + t.schema : ''}</span></div>`).join('')}</div>`
+        ${h.length ? `<div class="hist">${h.map((t, i) => `<div><b>${nlNum(t.meters)} m in ${fmtTime(t.sec)}</b><span class="d">${fmtDate(t.date)}, gemiddeld ${nlNum(t.spm, 1)} slagen, ${t.onTarget}% op tempo${t.schema ? ', ' + t.schema : ''}</span><button type="button" class="del" data-act="histdel" data-i="${i}">Weghalen</button></div>`).join('')}</div>`
           : '<p>Je hebt nog geen trainingen afgerond. Rond een training af via Training, dan staat hij hier.</p>'}
         <p>Deze lijst staat alleen op dit apparaat, in deze browser.</p>
         <div class="btns"><button type="button" class="btn" data-act="training">Terug</button><button type="button" class="btn primary" data-act="sheetclose">Sluiten</button></div>`;
@@ -1087,11 +1091,16 @@ function drawRower(g, x, y, w, h, ph) {
   function finish() {
     const t = summary();
     if (t.meters < 10 && t.sec < 30) { hint('Er is nog niet genoeg geroeid om af te ronden.'); return; }
-    history.add(t);
     lastSum = t;
+    openSheet('summary');
+  }
+  function endTraining(keep) {
+    const t = summary();   // opnieuw, want er kan nog geroeid zijn terwijl de vraag openstond
+    if (keep) { history.add(t); t.saved = true; lastSum = t; }
     s.prog = null;
     resetSession(true);
-    openSheet('summary');
+    if (keep) drawSheet();
+    else { closeSheet(); hint('De training is niet bewaard. Afstand en tijd staan weer op nul.'); }
   }
 
   function editOwn(b) {
@@ -1118,6 +1127,9 @@ function drawRower(g, x, y, w, h, ph) {
     progstart: () => { startProg(picked); closeSheet(); },
     progstop: () => { s.prog = null; hint('Schema gestopt. Je roeit nu vrij verder.'); closeSheet(); render(); },
     finish,
+    save: () => endTraining(true),
+    nosave: () => endTraining(false),
+    histdel: b => { const t = history.get()[+b.dataset.i]; if (t && confirm(`De training van ${fmtDate(t.date)} (${nlNum(t.meters)} m) weghalen? Dat kan niet ongedaan worden.`)) keepScroll(() => history.del(+b.dataset.i)); },
     hist: () => openSheet('hist'),
     ed: b => keepScroll(() => editOwn(b)),
     eddel: b => keepScroll(() => { const pt = own.parts[+b.dataset.p]; pt.blocks.splice(+b.dataset.i, 1); if (!pt.blocks.length) own.parts.splice(+b.dataset.p, 1); saveOwn(); }),
