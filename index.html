@@ -136,6 +136,10 @@
   .choice b { font-size: 15px; font-weight: 600; }
   .choice span { font-size: 13px; color: var(--muted); }
   .choice[aria-pressed="true"] { border-color: var(--blue); }
+  .linkbtn { justify-self: start; color: var(--blue); font-size: 14px; font-weight: 600; padding: 4px 0; }
+  .ed .sum1 { font-size: 14px; font-weight: 600; }
+  .ed > .del { justify-self: start; color: var(--muted); font-size: 13px; }
+  .ib.setbtn.on { color: var(--ok); }
   .ed { display: grid; gap: 10px; padding: 12px; border-radius: 14px; background: #1b2026; }
   .part { display: grid; gap: 8px; }
   .part + .part { border-top: 1px solid var(--line); padding-top: 12px; }
@@ -191,6 +195,7 @@
     <symbol id="i-bt" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></symbol>
     <symbol id="i-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.8-6.3"/><path d="M3.5 4v4.5H8"/></symbol>
     <symbol id="i-pip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><rect x="11.5" y="12" width="7" height="4.5" rx="1" fill="currentColor"/></symbol>
+    <symbol id="i-set" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h9M19 7h1M4 17h3M13 17h7"/><circle cx="16" cy="7" r="2.6"/><circle cx="10" cy="17" r="2.6"/></symbol>
     <symbol id="i-minus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></symbol>
     <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14M12 5v14"/></symbol>
   </defs>
@@ -200,7 +205,7 @@
   <div class="top">
     <button class="chip" data-act="training" type="button">Training</button>
     <button class="chip go" data-act="finish" type="button" hidden>Afronden</button>
-    <button class="chip" data-act="demo" type="button" aria-pressed="false">Demo</button>
+    <button class="ib setbtn" data-act="settings" type="button" aria-label="Instellingen" title="Instellingen"><svg><use href="#i-set"/></svg></button>
     <button class="ib" data-act="reset" id="resetBtn" type="button" aria-label="Afstand en tijd op nul zetten" title="Afstand en tijd op nul zetten"><svg><use href="#i-reset"/></svg></button>
     <button class="chip pipchip" data-act="pip" type="button" aria-pressed="false" aria-label="Zwevende balk"><svg><use href="#i-pip"/></svg><span class="wide-only">Zwevende balk</span></button>
     <button class="ib bt cta" data-act="conn" type="button" aria-label="Verbinden met de roeier"><svg><use href="#i-bt"/></svg><span class="dot"></span></button>
@@ -744,7 +749,8 @@ function drawRower(g, x, y, w, h, ph) {
   })();
 
   function setDemoButtons(on) {
-    all('[data-act="demo"]').forEach(b => { b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+    all('[data-act="demo"]').forEach(b => b.setAttribute('aria-checked', String(on)));
+    all('[data-act="settings"]').forEach(b => b.classList.toggle('on', on));   // groen pictogram: de demo staat aan
   }
 
   function stopDemo() {
@@ -760,7 +766,7 @@ function drawRower(g, x, y, w, h, ph) {
     setDemoButtons(true);
     demo.start();
     keepAwake();
-    hint('Demo: er komen nagebootste slagen binnen.');
+    hint('De demo staat aan: er komen nagebootste slagen binnen. Uitzetten kan bij Instellingen.');
   }
 
   // ---------- Zwevende balk (Picture-in-Picture van een canvas) ----------
@@ -1104,6 +1110,7 @@ function drawRower(g, x, y, w, h, ph) {
       const stepper = (pi, i, f, d, label, val, unit) => `<span class="mini"><button type="button" data-act="ed" data-p="${pi}" data-i="${i}" data-f="${f}" data-d="${-d}" aria-label="${label[0]}">&minus;</button><span class="v">${val}<small>${unit}</small></span><button type="button" data-act="ed" data-p="${pi}" data-i="${i}" data-f="${f}" data-d="${d}" aria-label="${label[1]}">+</button></span>`;
       const nBlocks = own.parts.reduce((a, pt) => a + pt.blocks.length, 0);
       const editor = picked === 'eigen' ? `<div class="ed">
+          <div class="sum1">Samen ${fmtTime(totalSec(expand(presetById('eigen'))))} roeien</div>
           ${own.parts.map((pt, pi) => `<div class="part">
             ${pt.blocks.map((b, i) => `<div class="blk"><div class="head"><span>Blok ${i + 1}</span>${nBlocks > 1 ? `<button type="button" class="del" data-act="eddel" data-p="${pi}" data-i="${i}">Weghalen</button>` : ''}</div>
               ${stepper(pi, i, 'sec', 30, ['Korter', 'Langer'], fmtTime(b.sec), 'minuten')}
@@ -1111,35 +1118,40 @@ function drawRower(g, x, y, w, h, ph) {
             <div class="partfoot"><button type="button" class="btn small" data-act="edadd" data-p="${pi}">Blok toevoegen</button>
               <span class="mini"><button type="button" data-act="edreps" data-p="${pi}" data-d="-1" aria-label="Minder keer">&minus;</button><span class="v">${pt.reps} keer</span><button type="button" data-act="edreps" data-p="${pi}" data-d="1" aria-label="Meer keer">+</button></span></div>
           </div>`).join('')}
-          <div class="btns"><button type="button" class="btn small" data-act="edpart">Deel toevoegen</button></div>
-          <p>Elk deel roei je het aantal keer dat erbij staat, daarna begint het volgende deel. Zo kun je bijvoorbeeld inroeien, dan herhalen en daarna uitroeien. Samen ${fmtTime(totalSec(expand(presetById('eigen'))))} roeien.</p>
+          <p>Elk deel roei je het aantal keer dat erbij staat, daarna begint het volgende deel.</p>
+          <button type="button" class="linkbtn" data-act="edpart">Deel toevoegen</button>
         </div>` : '';
       const planChoice = plan ? `<button type="button" class="choice" data-act="pick" data-id="plan" aria-pressed="${picked === 'plan'}"><b>Plan: ${planName(plan.next).toLowerCase()}</b><span>${plan.sessions[plan.next].title && !/^(training|sessie|dag|workout|les)\s*\d+$/i.test(plan.sessions[plan.next].title) ? plan.sessions[plan.next].title + '. ' : ''}${plan.sessions[plan.next].parts.map(describePart).join('; ')}</span></button>` : '';
       const planBox = plan && picked === 'plan' ? `<div class="ed">
-          <div class="partfoot"><span>Je hebt ${plan.done.length} van de ${plan.sessions.length} trainingen gedaan.</span>
+          <div class="partfoot"><span>${plan.done.length} van de ${plan.sessions.length} gedaan</span>
             <span class="mini"><button type="button" data-act="plannav" data-d="-1" aria-label="Vorige training">&minus;</button><span class="v">Training ${plan.next + 1}${plan.done.includes(plan.next) ? ' (gedaan)' : ''}</span><button type="button" data-act="plannav" data-d="1" aria-label="Volgende training">+</button></span></div>
-          <p>Is een training uit het plan helemaal geroeid, dan staat de volgende vanzelf klaar. Met min en plus kies je zelf een andere.</p>
-          <div class="btns"><button type="button" class="btn small" data-act="plandel">Plan weghalen</button></div>
+          <p>Heb je een training helemaal geroeid, dan staat de volgende vanzelf klaar.</p>
+          <button type="button" class="del" data-act="plandel">Plan weghalen</button>
         </div>` : '';
       const again = s.prog && s.prog.id === picked && (picked !== 'plan' || s.prog.planIdx === plan.next);
       panel.innerHTML = `<h2>Training</h2>${running}
-        <div class="sec"><div class="lbl">Schema</div>
+        <div class="sec">
           ${planChoice}${planBox}
-          ${PRESETS.map(p => `<button type="button" class="choice" data-act="pick" data-id="${p.id}" aria-pressed="${picked === p.id}"><b>${p.name}</b><span>${p.note}</span></button>`).join('')}
-          ${editor}
-          <button type="button" class="btn" data-act="paste">Schema of plan plakken</button>
+          ${PRESETS.map(p => `<button type="button" class="choice" data-act="pick" data-id="${p.id}" aria-pressed="${picked === p.id}"><b>${p.name}</b><span>${p.note}</span></button>${p.id === 'eigen' ? editor : ''}`).join('')}
+          <button type="button" class="linkbtn" data-act="paste">Schema of plan plakken</button>
+        </div>
+        <div class="btns foot">
+          <button type="button" class="btn primary" data-act="progstart">${picked === 'vrij' ? 'Vrij roeien' : again ? 'Opnieuw beginnen' : 'Starten'}</button>
+          <button type="button" class="btn" data-act="sheetclose">Sluiten</button>
+        </div>`;
+    } else if (view === 'settings') {
+      const n = history.get().length;
+      panel.innerHTML = `<h2>Instellingen</h2>
+        <div class="sec"><div class="lbl">Trainingen</div>
+          <p>${n ? `Je hebt ${n === 1 ? '1 training' : n + ' trainingen'} bewaard op dit apparaat.` : 'Je hebt nog geen trainingen bewaard.'}</p>
+          <div class="btns"><button type="button" class="btn" data-act="hist">Eerdere trainingen</button></div>
         </div>
         ${roeierSection()}
         ${recSection()}
-        <div class="sec"><div class="lbl">Afronden</div>
-          <p>Rond je de training af, dan zie je een overzicht en kies je of je hem bewaart op dit apparaat. Afstand en tijd gaan daarna weer op nul. Dat kan ook met de blauwe knop Afronden bovenin.</p>
-          <div class="btns"><button type="button" class="btn" data-act="finish">Training afronden</button><button type="button" class="btn" data-act="hist">Eerdere trainingen</button></div>
-          <button type="button" class="btn small" data-act="zero">Op nul zetten zonder te bewaren</button>
+        <div class="sec"><div class="lbl">Demo</div>
+          <div class="row"><p>Nagebootste slagen, om alles uit te proberen zonder te roeien.</p><button class="switch" data-act="demo" type="button" role="switch" aria-checked="${s.source === 'demo'}" aria-label="Demo"></button></div>
         </div>
-        <div class="btns foot">
-          <button type="button" class="btn primary" data-act="progstart">${picked === 'vrij' ? 'Vrij roeien' : again ? 'Opnieuw beginnen' : 'Schema starten'}</button>
-          <button type="button" class="btn" data-act="sheetclose">Sluiten</button>
-        </div>`;
+        <div class="btns foot"><button type="button" class="btn primary" data-act="sheetclose">Sluiten</button></div>`;
     } else if (view === 'paste') {
       panel.innerHTML = `<h2>Schema of plan plakken</h2>
         <p>Zet elk deel op een eigen regel, met de tijd en het tempo in slagen per minuut. Wil je een deel een paar keer herhalen, zet dan het aantal keer ervoor. Bijvoorbeeld:</p>
@@ -1183,9 +1195,9 @@ function drawRower(g, x, y, w, h, ph) {
       const h = history.get();
       panel.innerHTML = `<h2>Eerdere trainingen</h2>
         ${h.length ? `<div class="hist">${h.map((t, i) => `<div><b>${nlNum(t.meters)} m in ${fmtTime(t.sec)}</b><span class="d">${fmtDate(t.date)}, gemiddeld ${nlNum(t.spm, 1)} slagen, ${t.onTarget}% op tempo${t.schema ? ', ' + t.schema : ''}</span><span class="acts"><button type="button" class="del fit" data-act="fit" data-i="${i}">${t.fit ? 'Nog een keer naar HealthFit' : 'Naar HealthFit'}</button><button type="button" class="del" data-act="histdel" data-i="${i}">Weghalen</button></span></div>`).join('')}</div>`
-          : '<p>Je hebt nog geen trainingen afgerond. Rond een training af via Training, dan staat hij hier.</p>'}
+          : '<p>Je hebt nog geen trainingen bewaard. Rond een training af met de blauwe knop Afronden bovenin, dan staat hij hier.</p>'}
         <p>Deze lijst staat alleen op dit apparaat, in deze browser. Met Naar HealthFit deel je een training als bestand: kies HealthFit in het deelmenu, of bewaar het bestand in de map die HealthFit leest in Dropbox of Google Drive. HealthFit zet de training dan als roeitraining in Apple Gezondheid.</p>
-        <div class="btns"><button type="button" class="btn" data-act="training">Terug</button><button type="button" class="btn primary" data-act="sheetclose">Sluiten</button></div>`;
+        <div class="btns"><button type="button" class="btn" data-act="settings">Terug</button><button type="button" class="btn primary" data-act="sheetclose">Sluiten</button></div>`;
     }
   }
 
@@ -1319,6 +1331,7 @@ function drawRower(g, x, y, w, h, ph) {
     pip: () => pip.toggle(),
     pipclose: () => pip.close(),
     training: () => openSheet('training'),
+    settings: () => openSheet('settings'),
     sheetclose: closeSheet,
     pick: b => keepScroll(() => { picked = b.dataset.id; }),
     progstart: () => { startProg(picked); closeSheet(); },
