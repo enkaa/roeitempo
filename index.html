@@ -76,7 +76,8 @@
   .big .of { font-size: .32em; font-weight: 600; color: var(--soft); }
   .cue { font-size: clamp(14px, 2.8vmin, 22px); font-weight: 600; color: var(--state); transition: color .4s; }
 
-  .t-ritme { grid-area: ritme; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; min-height: 90px; }
+  .t-ritme { grid-area: ritme; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 6px; min-height: 90px; }
+  .ratio { font-size: clamp(13px, 2.2vmin, 17px); color: var(--muted); min-height: 1.3em; }
   .t-ritme canvas { width: 100%; height: 100%; display: block; }
 
   .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -166,6 +167,8 @@
   .hist div { background: var(--raise); border-radius: 12px; padding: 10px 14px; font-size: 14px; display: grid; gap: 2px; }
   .hist .d { color: var(--muted); font-size: 13px; }
   .hist .del { justify-self: start; color: var(--muted); font-size: 13px; padding: 4px 0 0; }
+  .hist .acts { display: flex; gap: 18px; }
+  .hist .acts .fit { color: var(--blue); }
 
   .pipwrap { position: fixed; inset: 0; z-index: 10; background: rgba(11, 13, 16, .94); display: flex; flex-direction: column;
     align-items: center; justify-content: center; gap: 14px; padding: 16px; text-align: center;
@@ -212,6 +215,7 @@
   <section class="tile t-ritme">
     <div class="lbl">Ritme</div>
     <canvas id="ritme" aria-label="Roeiertje dat de slag voordoet op het doeltempo"></canvas>
+    <div class="ratio" data-v="ratio"></div>
   </section>
 
   <section class="tile t-doel">
@@ -310,6 +314,7 @@
     setText('dist', meters().toLocaleString('nl-NL'));
     setText('time', fmtTime(s.elapsed / 1000));
     setText('pace', active && s.pace > 0 && s.pace < 600 ? fmtTime(s.pace) : '-:--');
+    setText('ratio', ratioText(active));
     const pi = progInfo();
     setText('prog', pi ? `Blok ${pi.idx + 1} van ${pi.n}, nog ${fmtTime(pi.rem)}.` + (pi.next ? ` Daarna tempo ${pi.next.spm}.` : ' Dit is het laatste blok.') : '');
     drawSegs(pi);
@@ -318,6 +323,14 @@
     const fb = document.querySelector('.top [data-act="finish"]');
     if (fb.hidden === canFinish) { fb.hidden = !canFinish; $('resetBtn').hidden = canFinish; }
     pip.draw(st, active);
+  }
+
+  // Terugkomen ten opzichte van de haal, over hetzelfde middenstuk (gemiddelde van de laatste 3 slagen)
+  function ratioText(active) {
+    if (!active || !s.ratios || !s.ratios.length || performance.now() - s.ratioAt > 15000) return '';
+    const r = s.ratios.reduce((a, b) => a + b, 0) / s.ratios.length;
+    const tip = r < 1.4 ? 'Kom rustiger terug.' : r > 2.6 ? 'Je mag iets vlotter terugkomen.' : 'Mooi ritme.';
+    return `Terugkomen duurt ${nlNum(r, 1)} keer zo lang als de haal. ${tip}`;
   }
 
   // Kleur per blok: rustig = blauw, zwaar = paars (los van groen/oranje/rood, die over je tempo gaan)
@@ -540,7 +553,9 @@ function drawRower(g, x, y, w, h, ph) {
   const FTMS = 0x1826, ROWER_DATA = 0x2ad1;
   // Extra gegevens van ESPRowingMonitor, voor het afstellen (opname)
   const EXT_SVC = 'a72a5762-803b-421d-a759-f0314153da97', EXT_METRICS = '808a0d51-efae-4f0c-b2e0-48bc180d65c3',
-    DELTA_TIMES = 'ae5d11ea-62f6-4789-b809-6fc93fee92b9', SETTINGS_SVC = '56892de1-7068-4b5a-acaa-473d97b02206';
+    DELTA_TIMES = 'ae5d11ea-62f6-4789-b809-6fc93fee92b9', SETTINGS_SVC = '56892de1-7068-4b5a-acaa-473d97b02206',
+    CALIB = '2f6b3a8e-5c1d-4e7a-9b3f-1d2c3b4a5e60', CONTROL = 0x2ad9;
+  let stand = store.get('stand', 1), ijk = store.get('ijk', 1);   // weerstandsstand R30 en afstand bijstellen (factor)
   let device = null, wantConnected = false, retryTimer = null;
   const rec = { on: false, sub: false, err: '', t0: 0, start: null, rows: [], ext: [], dt: [], dtAt: [] };
   const recT = () => Math.round(performance.now() - rec.t0);
@@ -559,8 +574,10 @@ function drawRower(g, x, y, w, h, ph) {
     recShow();
   }
   function onExtMetrics(e) {
-    if (!rec.on) return;
-    const v = e.target.value;   // vermogen (W), haal- en terugslagduur (1/4096 s), dragfactor
+    const v = e.target.value;
+    const drive = v.getUint16(2, true) / 4096, back = v.getUint16(4, true) / 4096;
+    if (drive > 0 && back > 0) { s.ratios = [...(s.ratios || []).slice(-2), back / drive]; s.ratioAt = performance.now(); }
+    if (!rec.on) return;   // vermogen (W), haal- en terugslagduur (1/4096 s), dragfactor
     rec.ext.push([recT(), v.getInt16(0, true), +(v.getUint16(2, true) / 4096).toFixed(3), +(v.getUint16(4, true) / 4096).toFixed(3), v.getUint16(6, true)]);
     recShow();
   }
@@ -584,6 +601,24 @@ function drawRower(g, x, y, w, h, ph) {
       rec.err = `Opnemen lukte niet (${step}): ${e && (e.name + ' ' + e.message)}`;
       return false;
     }
+  }
+  // Na het verbinden: extra gegevens (ritme, opname) en de instellingen naar de roeier. Faalt dit, dan werkt de rest gewoon.
+  async function afterConnect() {
+    await recSubscribe();
+    await sendSettings();
+  }
+  async function sendSettings() {
+    if (!device || !device.gatt.connected) return;
+    try {
+      const cp = await (await device.gatt.getPrimaryService(FTMS)).getCharacteristic(CONTROL);
+      await cp.writeValue(new Uint8Array([0x00]));                 // controle vragen
+      await cp.writeValue(new Uint8Array([0x04, stand * 10]));     // weerstandsstand, in tienden
+    } catch (e) {}
+    try {
+      const c = await (await device.gatt.getPrimaryService(EXT_SVC)).getCharacteristic(CALIB);
+      const b = new DataView(new ArrayBuffer(4)); b.setFloat32(0, ijk, true);
+      await c.writeValue(b.buffer);
+    } catch (e) {}
   }
   function recShow() { const el = document.getElementById('recN'); if (el) el.textContent = `${nlNum(rec.dt.length)} metingen, ${nlNum(rec.ext.length)} ${rec.ext.length === 1 ? 'slag' : 'slagen'}`; }
 
@@ -616,7 +651,7 @@ function drawRower(g, x, y, w, h, ph) {
     const ch = await svc.getCharacteristic(ROWER_DATA);
     ch.addEventListener('characteristicvaluechanged', onRowerData);
     await ch.startNotifications();
-    if (rec.on) recSubscribe();
+    setTimeout(afterConnect, 300);
     setConn('on', 'Verbonden met ' + (device.name || 'de roeier'));
     hint('Verbonden met de roeier.');
   }
@@ -637,6 +672,19 @@ function drawRower(g, x, y, w, h, ph) {
     }
     try {
       device = await navigator.bluetooth.requestDevice({ filters: [{ services: [FTMS] }], optionalServices: [EXT_SVC, SETTINGS_SVC] });
+      await useDevice(device);
+    } catch (e) {
+      if (e && e.name === 'NotFoundError') { if (!wantConnected) setConn('off', 'Verbinden met de roeier'); return; }
+      if (wantConnected) scheduleRetry();
+      else { setConn('off', 'Verbinden met de roeier'); hint('Verbinden lukte niet. Probeer het nog eens.'); }
+    }
+  }
+
+  async function useDevice(d) {
+    device = d;
+    store.set('auto', true);                // de volgende keer bij openen meteen verbinden (als de browser dat kan)
+    store.set('devName', d.name || '');
+    try {
       device.addEventListener('gattserverdisconnected', scheduleRetry);
       wantConnected = true;
       stopDemo();
@@ -655,7 +703,18 @@ function drawRower(g, x, y, w, h, ph) {
     }
   }
 
+  // Bij openen meteen verbinden met de roeier van de vorige keer (alleen als de browser getDevices kent)
+  async function autoConnect() {
+    if (!navigator.bluetooth || !navigator.bluetooth.getDevices || !store.get('auto', false)) return;
+    try {
+      const ds = await navigator.bluetooth.getDevices();
+      const d = ds.find(x => x.name && x.name === store.get('devName', '')) || ds[0];
+      if (d) await useDevice(d);
+    } catch (e) {}
+  }
+
   function disconnect() {
+    store.set('auto', false);
     wantConnected = false;
     clearTimeout(retryTimer);
     try { if (device && device.gatt.connected) device.gatt.disconnect(); } catch (e) {}
@@ -1070,6 +1129,7 @@ function drawRower(g, x, y, w, h, ph) {
           ${editor}
           <button type="button" class="btn" data-act="paste">Schema of plan plakken</button>
         </div>
+        ${roeierSection()}
         ${recSection()}
         <div class="sec"><div class="lbl">Afronden</div>
           <p>Rond je de training af, dan zie je een overzicht en kies je of je hem bewaart op dit apparaat. Afstand en tijd gaan daarna weer op nul. Dat kan ook met de blauwe knop Afronden bovenin.</p>
@@ -1118,17 +1178,26 @@ function drawRower(g, x, y, w, h, ph) {
         </div>
         ${asking ? `<p>Bewaar je de training, dan staat hij bij Eerdere trainingen. In beide gevallen gaan afstand en tijd daarna weer op nul. Sluit je dit venster, dan roei je gewoon verder met deze training.</p>
         <div class="btns"><button type="button" class="btn" data-act="nosave">Niet bewaren</button><button type="button" class="btn primary" data-act="save">Bewaren</button></div>`
-        : `<div class="btns"><button type="button" class="btn" data-act="hist">Eerdere trainingen</button><button type="button" class="btn primary" data-act="sheetclose">Klaar</button></div>`}`;
+        : `<div class="btns"><button type="button" class="btn" data-act="fit" data-i="last">Naar HealthFit</button><button type="button" class="btn" data-act="hist">Eerdere trainingen</button><button type="button" class="btn primary" data-act="sheetclose">Klaar</button></div>`}`;
     } else if (view === 'hist') {
       const h = history.get();
       panel.innerHTML = `<h2>Eerdere trainingen</h2>
-        ${h.length ? `<div class="hist">${h.map((t, i) => `<div><b>${nlNum(t.meters)} m in ${fmtTime(t.sec)}</b><span class="d">${fmtDate(t.date)}, gemiddeld ${nlNum(t.spm, 1)} slagen, ${t.onTarget}% op tempo${t.schema ? ', ' + t.schema : ''}</span><button type="button" class="del" data-act="histdel" data-i="${i}">Weghalen</button></div>`).join('')}</div>`
+        ${h.length ? `<div class="hist">${h.map((t, i) => `<div><b>${nlNum(t.meters)} m in ${fmtTime(t.sec)}</b><span class="d">${fmtDate(t.date)}, gemiddeld ${nlNum(t.spm, 1)} slagen, ${t.onTarget}% op tempo${t.schema ? ', ' + t.schema : ''}</span><span class="acts"><button type="button" class="del fit" data-act="fit" data-i="${i}">${t.fit ? 'Nog een keer naar HealthFit' : 'Naar HealthFit'}</button><button type="button" class="del" data-act="histdel" data-i="${i}">Weghalen</button></span></div>`).join('')}</div>`
           : '<p>Je hebt nog geen trainingen afgerond. Rond een training af via Training, dan staat hij hier.</p>'}
-        <p>Deze lijst staat alleen op dit apparaat, in deze browser.</p>
+        <p>Deze lijst staat alleen op dit apparaat, in deze browser. Met Naar HealthFit deel je een training als bestand: kies HealthFit in het deelmenu, of bewaar het bestand in de map die HealthFit leest in Dropbox of Google Drive. HealthFit zet de training dan als roeitraining in Apple Gezondheid.</p>
         <div class="btns"><button type="button" class="btn" data-act="training">Terug</button><button type="button" class="btn primary" data-act="sheetclose">Sluiten</button></div>`;
     }
   }
 
+  function roeierSection() {
+    const step = (act, val, unit, lbl) => `<span class="mini"><button type="button" data-act="${act}" data-d="-1" aria-label="${lbl[0]}">&minus;</button><span class="v">${val}<small>${unit}</small></span><button type="button" data-act="${act}" data-d="1" aria-label="${lbl[1]}">+</button></span>`;
+    return `<div class="sec"><div class="lbl">Roeier</div>
+      <div class="row"><p>Stand van de draaiknop op de R30</p>${step('stand', stand, 'van 8', ['Lichtere stand', 'Zwaardere stand'])}</div>
+      <p>Zet hier dezelfde stand als op de draaiknop. Een zwaardere stand telt dan als meer meters per slag.</p>
+      <div class="row"><p>Afstand per slag</p>${step('ijk', Math.round(ijk * 100) + '%', 'van de schatting', ['Minder afstand', 'Meer afstand'])}</div>
+      <p>De R30 meet zelf geen afstand, dus de meters zijn een schatting. Vind je je tempo per 500 m te snel of te langzaam, stel het dan hier bij. Dit geldt vanaf de volgende slag.</p>
+    </div>`;
+  }
   function recSection() {
     let body;
     if (rec.on) body = `<p>De opname loopt: <b id="recN"></b>. Roei ongeveer 2 minuten zo gelijkmatig als je kunt. Stop daarna 10 seconden met roeien en laat het vliegwiel uitlopen. Stop dan de opname.</p>
@@ -1148,6 +1217,64 @@ function drawRower(g, x, y, w, h, ph) {
       rows: rec.rows, ext: rec.ext, dtAt: rec.dtAt, dt: rec.dt });
   }
   function recName() { const d = new Date(rec.start || Date.now()), z = n => String(n).padStart(2, '0'); return `roei-opname-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.txt`; }
+
+  // ---------- FIT-bestand (voor HealthFit / Apple Gezondheid) ----------
+  const FIT_CRC = [0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401, 0xA001, 0x6C00, 0x7800, 0xB401, 0x5000, 0x9C01, 0x8801, 0x4400];
+  function fitCrc(bytes, crc = 0) {
+    for (const b of bytes) {
+      let tmp = FIT_CRC[crc & 0xF]; crc = (crc >> 4) & 0x0FFF; crc = crc ^ tmp ^ FIT_CRC[b & 0xF];
+      tmp = FIT_CRC[crc & 0xF]; crc = (crc >> 4) & 0x0FFF; crc = crc ^ tmp ^ FIT_CRC[(b >> 4) & 0xF];
+    }
+    return crc;
+  }
+  function fitFile(t) {
+    const SIZE = { 0x00: 1, 0x02: 1, 0x84: 2, 0x86: 4, 0x8C: 4 };
+    const out = [];
+    const put = (v, type) => { for (let i = 0; i < SIZE[type]; i++) out.push((v >>> (8 * i)) & 0xff); };
+    let local = 0;
+    // Elk bericht: eigen lokale nummer, definitie + gegevens. fields: [veldnummer, type, waarde]
+    const msg = (global, fields) => {
+      const l = local++ & 0x0f;
+      out.push(0x40 | l, 0, 0, global & 0xff, global >> 8, fields.length);
+      fields.forEach(([num, type]) => out.push(num, SIZE[type], type));
+      out.push(l);
+      fields.forEach(([, type, v]) => put(Math.max(0, Math.round(v)), type));
+    };
+    const start = new Date(t.date).getTime(), end = start + t.sec * 1000;
+    const fitTime = ms => Math.floor(ms / 1000) - 631065600;   // seconden sinds 31 dec 1989
+    const ts0 = fitTime(start), ts1 = fitTime(end);
+    const speed = t.sec > 0 ? t.meters / t.sec : 0;
+    const watts = Math.min(1500, 2.8 * speed ** 3);              // zelfde verband als Concept2 (begrensd)
+    const kcal = (4 * 0.8604 * watts + 300) * t.sec / 3600;
+    const ENUM = 0x00, U8 = 0x02, U16 = 0x84, U32 = 0x86, U32Z = 0x8C;
+    msg(0, [[0, ENUM, 4], [1, U16, 255], [2, U16, 1], [3, U32Z, 30], [4, U32, ts0]]);                       // file_id: activiteit
+    msg(21, [[253, U32, ts0], [0, ENUM, 0], [1, ENUM, 0]]);                                                  // event: start
+    msg(20, [[253, U32, ts0], [5, U32, 0], [4, U8, 0]]);                                                     // record: begin
+    msg(20, [[253, U32, ts1], [5, U32, t.meters * 100], [4, U8, t.spm]]);                                    // record: eind
+    msg(21, [[253, U32, ts1], [0, ENUM, 0], [1, ENUM, 4]]);                                                  // event: stop
+    const totals = [[7, U32, t.sec * 1000], [8, U32, t.sec * 1000], [9, U32, t.meters * 100], [10, U32, t.strokes], [11, U16, kcal]];
+    msg(19, [[253, U32, ts1], [2, U32, ts0], ...totals, [13, U16, speed * 1000], [17, U8, t.spm], [19, U16, watts], [0, ENUM, 9], [1, ENUM, 1], [25, ENUM, 15], [39, ENUM, 14]]);   // lap
+    msg(18, [[253, U32, ts1], [2, U32, ts0], ...totals, [14, U16, speed * 1000], [18, U8, t.spm], [20, U16, watts], [5, ENUM, 15], [6, ENUM, 14], [25, U16, 0], [26, U16, 1], [0, ENUM, 8], [1, ENUM, 1]]);   // session: binnen roeien
+    msg(34, [[253, U32, ts1], [0, U32, t.sec * 1000], [1, U16, 1], [2, ENUM, 0], [3, ENUM, 26], [4, ENUM, 1], [5, U32, ts1 - new Date(start).getTimezoneOffset() * 60]]);   // activity
+    const header = [14, 0x10, 2132 & 0xff, 2132 >> 8, out.length & 0xff, (out.length >> 8) & 0xff, (out.length >> 16) & 0xff, out.length >>> 24, 0x2E, 0x46, 0x49, 0x54];
+    const hc = fitCrc(header); header.push(hc & 0xff, hc >> 8);
+    const all = header.concat(out), crc = fitCrc(all);
+    all.push(crc & 0xff, crc >> 8);
+    return new Uint8Array(all);
+  }
+  async function shareFit(t, idx) {
+    if (!t) return;
+    const d = new Date(t.date), z = n => String(n).padStart(2, '0');
+    const file = new File([fitFile(t)], `roeien-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.fit`, { type: 'application/octet-stream' });
+    let done = false;
+    try {
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); done = true; }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    if (!done) { const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); done = true; }
+    // Onthouden dat hij gedeeld is (bij Eerdere trainingen)
+    const h = history.get(), i = idx === 'last' ? h.findIndex(x => x.date === t.date) : +idx;
+    if (h[i]) { h[i].fit = true; store.set('trainingen', h); if (view === 'hist') keepScroll(() => {}); }
+  }
 
   function autoFinish() {
     const t = summary(), saved = t.meters >= 10 || t.sec >= 30;
@@ -1197,6 +1324,9 @@ function drawRower(g, x, y, w, h, ph) {
     progstart: () => { startProg(picked); closeSheet(); },
     progstop: () => { s.prog = null; hint('Schema gestopt. Je roeit nu vrij verder.'); closeSheet(); render(); },
     finish,
+    stand: b => keepScroll(() => { stand = Math.max(1, Math.min(8, stand + +b.dataset.d)); store.set('stand', stand); sendSettings(); }),
+    ijk: b => keepScroll(() => { ijk = Math.max(0.5, Math.min(2, Math.round((ijk + 0.05 * +b.dataset.d) * 100) / 100)); store.set('ijk', ijk); sendSettings(); }),
+    fit: b => shareFit(b.dataset.i === 'last' ? lastSum : history.get()[+b.dataset.i], b.dataset.i),
     recstart: async () => {
       rec.err = '';
       if (!(await recSubscribe())) { keepScroll(() => {}); return; }
@@ -1258,6 +1388,7 @@ function drawRower(g, x, y, w, h, ph) {
   setAudio(false);
   setConn('off', 'Verbinden met de roeier');
   render();
+  autoConnect();
 })();
 </script>
 </body>
