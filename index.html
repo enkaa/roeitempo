@@ -538,7 +538,13 @@ function drawRower(g, x, y, w, h, ph) {
 
   // ---------- Bluetooth (FTMS, Rower Data 0x2AD1) ----------
   const FTMS = 0x1826, ROWER_DATA = 0x2ad1;
+  // Extra gegevens van ESPRowingMonitor, voor het afstellen (opname)
+  const EXT_SVC = 'a72a5762-803b-421d-a759-f0314153da97', EXT_METRICS = '808a0d51-efae-4f0c-b2e0-48bc180d65c3',
+    DELTA_TIMES = 'ae5d11ea-62f6-4789-b809-6fc93fee92b9', SETTINGS_SVC = '56892de1-7068-4b5a-acaa-473d97b02206';
   let device = null, wantConnected = false, retryTimer = null;
+  const rec = { on: false, hasExt: false, t0: 0, start: null, rows: [], ext: [], dt: [], dtAt: [] };
+  const recT = () => Math.round(performance.now() - rec.t0);
+  function recShow() { const el = document.getElementById('recN'); if (el) el.textContent = `${nlNum(rec.dt.length)} metingen, ${nlNum(rec.ext.length)} ${rec.ext.length === 1 ? 'slag' : 'slagen'}`; }
 
   function parseRowerData(dv) {
     let i = 0;
@@ -566,8 +572,35 @@ function drawRower(g, x, y, w, h, ph) {
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(FTMS);
     const ch = await svc.getCharacteristic(ROWER_DATA);
-    ch.addEventListener('characteristicvaluechanged', e => { if (s.source === 'ble') onData(parseRowerData(e.target.value)); });
+    ch.oncharacteristicvaluechanged = e => {
+      if (s.source !== 'ble') return;
+      const d = parseRowerData(e.target.value);
+      if (rec.on) rec.rows.push([recT(), d.spm, d.strokes, d.distance, d.pace]);
+      onData(d);
+    };
     await ch.startNotifications();
+    rec.hasExt = false;
+    try {
+      const ext = await server.getPrimaryService(EXT_SVC);
+      const dch = await ext.getCharacteristic(DELTA_TIMES);
+      dch.oncharacteristicvaluechanged = e => {
+        if (!rec.on) return;
+        const v = e.target.value;
+        for (let i = 0; i + 4 <= v.byteLength; i += 4) rec.dt.push(v.getUint32(i, true));   // microseconden per omwenteling
+        rec.dtAt.push([recT(), rec.dt.length]);
+        recShow();
+      };
+      await dch.startNotifications();
+      const mch = await ext.getCharacteristic(EXT_METRICS);
+      mch.oncharacteristicvaluechanged = e => {
+        if (!rec.on) return;
+        const v = e.target.value;   // vermogen (W), haal- en terugslagduur (1/4096 s), dragfactor
+        rec.ext.push([recT(), v.getInt16(0, true), +(v.getUint16(2, true) / 4096).toFixed(3), +(v.getUint16(4, true) / 4096).toFixed(3), v.getUint16(6, true)]);
+        recShow();
+      };
+      await mch.startNotifications();
+      rec.hasExt = true;
+    } catch (e) { /* oudere koppeling zonder toestemming voor deze gegevens: dan geen opname */ }
     setConn('on', 'Verbonden met ' + (device.name || 'de roeier'));
     hint('Verbonden met de roeier.');
   }
@@ -587,7 +620,7 @@ function drawRower(g, x, y, w, h, ph) {
       return;
     }
     try {
-      device = await navigator.bluetooth.requestDevice({ filters: [{ services: [FTMS] }] });
+      device = await navigator.bluetooth.requestDevice({ filters: [{ services: [FTMS] }], optionalServices: [EXT_SVC, SETTINGS_SVC] });
       device.addEventListener('gattserverdisconnected', scheduleRetry);
       wantConnected = true;
       stopDemo();
@@ -986,7 +1019,7 @@ function drawRower(g, x, y, w, h, ph) {
   // ---------- Paneel ----------
   const sheet = document.getElementById('sheet'), panel = document.getElementById('panel');
   let view = null, lastSum = null, pasteText = '';
-  function openSheet(v) { view = v; sheet.hidden = false; drawSheet(); }
+  function openSheet(v) { view = v; sheet.hidden = false; drawSheet(); recShow(); }
   function closeSheet() { sheet.hidden = true; view = null; }
   sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
 
@@ -1021,6 +1054,7 @@ function drawRower(g, x, y, w, h, ph) {
           ${editor}
           <button type="button" class="btn" data-act="paste">Schema of plan plakken</button>
         </div>
+        ${recSection()}
         <div class="sec"><div class="lbl">Afronden</div>
           <p>Rond je de training af, dan zie je een overzicht en kies je of je hem bewaart op dit apparaat. Afstand en tijd gaan daarna weer op nul. Dat kan ook met de blauwe knop Afronden bovenin.</p>
           <div class="btns"><button type="button" class="btn" data-act="finish">Training afronden</button><button type="button" class="btn" data-act="hist">Eerdere trainingen</button></div>
@@ -1079,6 +1113,25 @@ function drawRower(g, x, y, w, h, ph) {
     }
   }
 
+  function recSection() {
+    let body;
+    if (rec.on) body = `<p>De opname loopt: <b id="recN"></b>. Roei ongeveer 2 minuten zo gelijkmatig als je kunt. Stop daarna 10 seconden met roeien en laat het vliegwiel uitlopen. Stop dan de opname.</p>
+      <div class="btns"><button type="button" class="btn primary" data-act="recstop">Opname stoppen</button></div>`;
+    else if (rec.start) body = `<p>De opname is klaar: <b id="recN"></b>. Stuur hem naar de Mac met Delen (bijvoorbeeld via AirDrop), of kopieer hem.</p>
+      <div class="btns"><button type="button" class="btn primary" data-act="recshare">Delen</button><button type="button" class="btn" data-act="reccopy">Kopiëren</button></div>
+      <button type="button" class="btn small" data-act="recstart">Opnieuw opnemen</button>`;
+    else if (!rec.hasExt) body = `<p>${s.source === 'ble' ? 'Om op te nemen moet je de roeier opnieuw kiezen. Sluit dit venster, tik op de Bluetooth-knop om de verbinding te verbreken en tik er daarna nog een keer op.' : 'Maak eerst verbinding met de roeier. Daarna kun je hier een opname maken.'}</p>`;
+    else body = `<p>Met een opname van het vliegwiel kan de roeier beter worden afgesteld, zodat tempo en afstand kloppen.</p>
+      <div class="btns"><button type="button" class="btn" data-act="recstart">Opname starten</button></div>`;
+    return `<div class="sec"><div class="lbl">Afstellen</div>${body}</div>`;
+  }
+  function recText() {
+    return JSON.stringify({ app: 'roeitempo', device: device && device.name, start: rec.start,
+      uitleg: 'rows: [ms, spm, slagen, afstand m, s per 500 m]; ext: [ms, vermogen W, haal s, terug s, dragfactor]; dt: microseconden per impuls; dtAt: [ms, aantal dt tot dan]',
+      rows: rec.rows, ext: rec.ext, dtAt: rec.dtAt, dt: rec.dt });
+  }
+  function recName() { const d = new Date(rec.start || Date.now()), z = n => String(n).padStart(2, '0'); return `roei-opname-${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.txt`; }
+
   function autoFinish() {
     const t = summary(), saved = t.meters >= 10 || t.sec >= 30;
     if (saved) history.add(t);
@@ -1109,7 +1162,7 @@ function drawRower(g, x, y, w, h, ph) {
     else bl.spm = Math.max(GOAL_MIN, Math.min(GOAL_MAX, bl.spm + d));
     saveOwn();
   }
-  function keepScroll(fn) { const y = panel.scrollTop; fn(); drawSheet(); panel.scrollTop = y; }
+  function keepScroll(fn) { const y = panel.scrollTop; fn(); drawSheet(); recShow(); panel.scrollTop = y; }
 
   // ---------- Knoppen ----------
   const actions = {
@@ -1127,6 +1180,19 @@ function drawRower(g, x, y, w, h, ph) {
     progstart: () => { startProg(picked); closeSheet(); },
     progstop: () => { s.prog = null; hint('Schema gestopt. Je roeit nu vrij verder.'); closeSheet(); render(); },
     finish,
+    recstart: b => keepScroll(() => { Object.assign(rec, { on: true, t0: performance.now(), start: new Date().toISOString(), rows: [], ext: [], dt: [], dtAt: [] }); }),
+    recstop: () => keepScroll(() => { rec.on = false; }),
+    recshare: async () => {
+      const file = new File([recText()], recName(), { type: 'text/plain' });
+      try {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
+      } catch (e) { if (e && e.name === 'AbortError') return; }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+    },
+    reccopy: async () => {
+      try { await navigator.clipboard.writeText(recText()); hint('De opname is gekopieerd.'); }
+      catch (e) { hint('Kopiëren lukte niet. Probeer Delen.'); }
+    },
     save: () => endTraining(true),
     nosave: () => endTraining(false),
     histdel: b => { const t = history.get()[+b.dataset.i]; if (t && confirm(`De training van ${fmtDate(t.date)} (${nlNum(t.meters)} m) weghalen? Dat kan niet ongedaan worden.`)) keepScroll(() => history.del(+b.dataset.i)); },
