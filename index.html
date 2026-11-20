@@ -542,7 +542,7 @@ function drawRower(g, x, y, w, h, ph) {
   const EXT_SVC = 'a72a5762-803b-421d-a759-f0314153da97', EXT_METRICS = '808a0d51-efae-4f0c-b2e0-48bc180d65c3',
     DELTA_TIMES = 'ae5d11ea-62f6-4789-b809-6fc93fee92b9', SETTINGS_SVC = '56892de1-7068-4b5a-acaa-473d97b02206';
   let device = null, wantConnected = false, retryTimer = null;
-  const rec = { on: false, hasExt: false, t0: 0, start: null, rows: [], ext: [], dt: [], dtAt: [] };
+  const rec = { on: false, sub: false, err: '', t0: 0, start: null, rows: [], ext: [], dt: [], dtAt: [] };
   const recT = () => Math.round(performance.now() - rec.t0);
   // Vaste functies: addEventListener voegt dezelfde functie niet twee keer toe (bij opnieuw verbinden). Bluefy kent oncharacteristicvaluechanged niet.
   function onRowerData(e) {
@@ -563,6 +563,27 @@ function drawRower(g, x, y, w, h, ph) {
     const v = e.target.value;   // vermogen (W), haal- en terugslagduur (1/4096 s), dragfactor
     rec.ext.push([recT(), v.getInt16(0, true), +(v.getUint16(2, true) / 4096).toFixed(3), +(v.getUint16(4, true) / 4096).toFixed(3), v.getUint16(6, true)]);
     recShow();
+  }
+  // Pas bij Opname starten aanmelden voor de extra gegevens; de gewone verbinding blijft zo onaangeroerd.
+  async function recSubscribe() {
+    if (rec.sub) return true;
+    let step = 'dienst';
+    try {
+      const ext = await device.gatt.getPrimaryService(EXT_SVC);
+      step = 'metingen';
+      const dch = await ext.getCharacteristic(DELTA_TIMES);
+      dch.addEventListener('characteristicvaluechanged', onDeltaTimes);
+      await dch.startNotifications();
+      step = 'slaggegevens';
+      const mch = await ext.getCharacteristic(EXT_METRICS);
+      mch.addEventListener('characteristicvaluechanged', onExtMetrics);
+      await mch.startNotifications();
+      rec.sub = true;
+      return true;
+    } catch (e) {
+      rec.err = `Opnemen lukte niet (${step}): ${e && (e.name + ' ' + e.message)}`;
+      return false;
+    }
   }
   function recShow() { const el = document.getElementById('recN'); if (el) el.textContent = `${nlNum(rec.dt.length)} metingen, ${nlNum(rec.ext.length)} ${rec.ext.length === 1 ? 'slag' : 'slagen'}`; }
 
@@ -589,22 +610,13 @@ function drawRower(g, x, y, w, h, ph) {
 
   async function connectGatt() {
     setConn('busy', 'Bezig met verbinden');
+    rec.sub = false;
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(FTMS);
     const ch = await svc.getCharacteristic(ROWER_DATA);
     ch.addEventListener('characteristicvaluechanged', onRowerData);
     await ch.startNotifications();
-    rec.hasExt = false;
-    try {
-      const ext = await server.getPrimaryService(EXT_SVC);
-      const dch = await ext.getCharacteristic(DELTA_TIMES);
-      dch.addEventListener('characteristicvaluechanged', onDeltaTimes);
-      await dch.startNotifications();
-      const mch = await ext.getCharacteristic(EXT_METRICS);
-      mch.addEventListener('characteristicvaluechanged', onExtMetrics);
-      await mch.startNotifications();
-      rec.hasExt = true;
-    } catch (e) { /* oudere koppeling zonder toestemming voor deze gegevens: dan geen opname */ }
+    if (rec.on) recSubscribe();
     setConn('on', 'Verbonden met ' + (device.name || 'de roeier'));
     hint('Verbonden met de roeier.');
   }
@@ -1124,8 +1136,9 @@ function drawRower(g, x, y, w, h, ph) {
     else if (rec.start) body = `<p>De opname is klaar: <b id="recN"></b>. Stuur hem naar de Mac met Delen (bijvoorbeeld via AirDrop), of kopieer hem.</p>
       <div class="btns"><button type="button" class="btn primary" data-act="recshare">Delen</button><button type="button" class="btn" data-act="reccopy">Kopiëren</button></div>
       <button type="button" class="btn small" data-act="recstart">Opnieuw opnemen</button>`;
-    else if (!rec.hasExt) body = `<p>${s.source === 'ble' ? 'Om op te nemen moet je de roeier opnieuw kiezen. Sluit dit venster, tik op de Bluetooth-knop om de verbinding te verbreken en tik er daarna nog een keer op.' : 'Maak eerst verbinding met de roeier. Daarna kun je hier een opname maken.'}</p>`;
+    else if (s.source !== 'ble') body = '<p>Maak eerst verbinding met de roeier. Daarna kun je hier een opname maken.</p>';
     else body = `<p>Met een opname van het vliegwiel kan de roeier beter worden afgesteld, zodat tempo en afstand kloppen.</p>
+      ${rec.err ? `<p><b>${rec.err}</b></p><p>Lukt het steeds niet, kies de roeier dan opnieuw: sluit dit venster, tik op de Bluetooth-knop om de verbinding te verbreken en tik er daarna nog een keer op.</p>` : ''}
       <div class="btns"><button type="button" class="btn" data-act="recstart">Opname starten</button></div>`;
     return `<div class="sec"><div class="lbl">Afstellen</div>${body}</div>`;
   }
@@ -1184,7 +1197,11 @@ function drawRower(g, x, y, w, h, ph) {
     progstart: () => { startProg(picked); closeSheet(); },
     progstop: () => { s.prog = null; hint('Schema gestopt. Je roeit nu vrij verder.'); closeSheet(); render(); },
     finish,
-    recstart: b => keepScroll(() => { Object.assign(rec, { on: true, t0: performance.now(), start: new Date().toISOString(), rows: [], ext: [], dt: [], dtAt: [] }); }),
+    recstart: async () => {
+      rec.err = '';
+      if (!(await recSubscribe())) { keepScroll(() => {}); return; }
+      keepScroll(() => { Object.assign(rec, { on: true, t0: performance.now(), start: new Date().toISOString(), rows: [], ext: [], dt: [], dtAt: [] }); });
+    },
     recstop: () => keepScroll(() => { rec.on = false; }),
     recshare: async () => {
       const file = new File([recText()], recName(), { type: 'text/plain' });
