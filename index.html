@@ -53,8 +53,17 @@
         "top top top top top top"
         "tempo tempo tempo tempo tempo tempo"
         "ritme ritme ritme ritme ritme ritme"
-        "doel doel doel metro metro metro"
+        "doel doel doel doel doel doel"
+        "metro metro metro metro metro metro"
         "s1 s1 s2 s2 s3 s3"; }
+  }
+  /* Smal scherm (iPhone): bovenbalk op één regel */
+  @media (max-width: 520px) {
+    .top .chip { padding: 0 12px; }
+    .chip .wide-only { display: none; }
+    .chip.pipchip { width: 38px; padding: 0; justify-content: center; }
+    .ed .blk { grid-template-columns: 1fr; }
+    .ed .mini .v small { display: inline; margin-left: 5px; font-size: 13px; }
   }
 
   .top { grid-area: top; display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--gap); }   /* linksboven vrij voor de vensterknopjes */
@@ -119,13 +128,25 @@
   .choice b { font-size: 15px; font-weight: 600; }
   .choice span { font-size: 13px; color: var(--muted); }
   .choice[aria-pressed="true"] { border-color: var(--blue); }
-  .ed { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: #1b2026; }
-  .ed .blk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .ed .blk .n { color: var(--muted); font-size: 13px; width: 48px; }
-  .mini { display: inline-flex; align-items: center; gap: 6px; }
-  .mini button { width: 34px; height: 34px; border-radius: 50%; background: var(--raise); font-size: 18px; line-height: 1; }
-  .mini .v { min-width: 4.6em; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
-  .ed .del { margin-left: auto; color: var(--muted); font-size: 13px; padding: 6px 8px; }
+  .ed { display: grid; gap: 10px; padding: 12px; border-radius: 14px; background: #1b2026; }
+  .part { display: grid; gap: 8px; }
+  .part + .part { border-top: 1px solid var(--line); padding-top: 12px; }
+  .blk { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; padding: 10px 12px; border-radius: 12px; background: var(--raise); }
+  .blk .head { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--muted); }
+  .blk .del { color: var(--muted); font-size: 13px; padding: 2px 0 2px 10px; }
+  .mini { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-width: 0; }
+  .mini button { flex: none; width: 34px; height: 34px; border-radius: 50%; background: #2e353e; font-size: 18px; line-height: 1; }
+  .mini .v { text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+  .mini .v small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+  .partfoot { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .partfoot .mini { gap: 8px; }
+  .btn.small { height: 38px; font-size: 14px; padding: 0 14px; }
+  .panel textarea { width: 100%; min-height: 150px; resize: vertical; background: #0f1215; color: var(--text); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px; font: 15px/1.5 ui-monospace, "SF Mono", Menlo, monospace; -webkit-user-select: text; user-select: text; }
+  .panel pre { margin: 0; padding: 10px 12px; border-radius: 10px; background: #0f1215; color: var(--soft); font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+  .readout { display: grid; gap: 4px; font-size: 14px; color: var(--soft); }
+  .readout .bad { color: var(--slow); }
+  .foot { position: sticky; bottom: -20px; margin: 0 -20px -20px; padding: 12px 20px 20px; background: #15191e; border-top: 1px solid var(--line); }
   .btn { height: 46px; border-radius: 12px; background: var(--raise); font-size: 15px; font-weight: 600; padding: 0 16px; }
   .btn.primary { background: var(--blue); color: #fff; }
   .btn.wide { width: 100%; }
@@ -143,11 +164,12 @@
     opacity: 0; pointer-events: none; transition: opacity .2s; }
   .pipwrap.show { opacity: 1; pointer-events: auto; }
   .pipwrap p { margin: 0; font-size: 15px; color: var(--text); }
-  .pipwrap video { width: min(92vw, 520px); aspect-ratio: 840 / 96; border-radius: 10px; background: #111418; cursor: pointer; }
+  .pipwrap video { width: min(92vw, 520px); aspect-ratio: 840 / 128; border-radius: 10px; background: #111418; cursor: pointer; }
   .hint { position: fixed; left: 50%; top: calc(max(12px, env(safe-area-inset-top)) + 50px); transform: translateX(-50%); background: #2a3037; color: var(--text);
     font-size: 13px; padding: 8px 14px; border-radius: 10px; max-width: 92vw; text-align: center; width: max-content;
     opacity: 0; pointer-events: none; transition: opacity .3s; z-index: 20; }
   .hint.show { opacity: 1; }
+  .sheet:not([hidden]) ~ .hint { top: auto; bottom: calc(max(16px, env(safe-area-inset-bottom)) + 96px); }   /* boven de knoppen van het paneel */
 </style>
 </head>
 <body>
@@ -168,7 +190,7 @@
     <button class="chip" data-act="training" type="button">Training</button>
     <button class="chip" data-act="demo" type="button" aria-pressed="false">Demo</button>
     <button class="ib" data-act="reset" type="button" aria-label="Afstand en tijd op nul zetten" title="Afstand en tijd op nul zetten"><svg><use href="#i-reset"/></svg></button>
-    <button class="chip" data-act="pip" type="button" aria-pressed="false"><svg><use href="#i-pip"/></svg>Zwevende balk</button>
+    <button class="chip pipchip" data-act="pip" type="button" aria-pressed="false" aria-label="Zwevende balk"><svg><use href="#i-pip"/></svg><span class="wide-only">Zwevende balk</span></button>
     <button class="ib bt cta" data-act="conn" type="button" aria-label="Verbinden met de roeier"><svg><use href="#i-bt"/></svg><span class="dot"></span></button>
   </div>
 
@@ -209,7 +231,7 @@
 <div class="hint" id="hint"></div>
 
 <!-- Zwevende balk: wordt op dit canvas getekend en als video in Picture-in-Picture gezet -->
-<canvas id="pipCanvas" width="840" height="96" style="position:fixed;left:-9999px;top:0"></canvas>
+<canvas id="pipCanvas" width="840" height="128" style="position:fixed;left:-9999px;top:0"></canvas>
 <div class="pipwrap" id="pipWrap">
   <p>Tik op de balk om hem te laten zweven.</p>
   <video id="pipVideo" muted playsinline autoplay></video>
@@ -279,7 +301,7 @@
     setText('time', fmtTime(s.elapsed / 1000));
     setText('pace', active && s.pace > 0 && s.pace < 600 ? fmtTime(s.pace) : '-:--');
     const pi = progInfo();
-    setText('prog', pi ? `Blok ${pi.idx + 1} van ${pi.n}, nog ${fmtTime(pi.rem)}` + (pi.next ? `, daarna ${pi.next.spm}` : '') : '');
+    setText('prog', pi ? `Blok ${pi.idx + 1} van ${pi.n}, nog ${fmtTime(pi.rem)}.` + (pi.next ? ` Daarna tempo ${pi.next.spm}.` : ' Dit is het laatste blok.') : '');
     pip.draw(st, active);
   }
 
@@ -609,7 +631,7 @@ function drawRower(g, x, y, w, h, ph) {
     const HEX = { ok: '#30d158', slow: '#ff9f0a', fast: '#ff453a', idle: '#4a525c' };
     let ready = false, tickFlip = false;
 
-    // De balk: 420 x 48 punten, getekend op dubbele resolutie
+    // De balk: 420 x 64 punten, getekend op dubbele resolutie
     function draw(st, active) {
       if (!g) return;
       lastArgs = [st, active];
@@ -618,41 +640,45 @@ function drawRower(g, x, y, w, h, ph) {
       g.fillStyle = '#111418'; g.fillRect(0, 0, BW, BH);
       g.textBaseline = 'alphabetic';
 
-      // Links: tempo nu (kleur = op tempo, te langzaam of te snel) en het doel
-      let x = 14;
-      g.font = `700 24px ${FONT}`; g.fillStyle = active ? col : '#5d6773';
+      // Links: tempo nu (kleur = op tempo, te langzaam of te snel), het doel en daaronder de aanwijzing
+      let x = 16;
+      g.font = `700 30px ${FONT}`; g.fillStyle = active ? col : '#5d6773';
       const now = active ? String(Math.round(s.spm)) : '--';
-      g.fillText(now, x, 33); x += g.measureText(now).width + 3;
-      g.font = `600 13px ${FONT}`; g.fillStyle = '#c9ced4';
-      g.fillText('/ ' + s.goal, x, 33);
+      g.fillText(now, x, 36); x += g.measureText(now).width + 3;
+      g.font = `600 16px ${FONT}`; g.fillStyle = '#c9ced4';
+      g.fillText('/ ' + s.goal, x, 36);
+      // In de laatste 5 tellen van een blok: aankondiging van het volgende tempo
+      const pi = progInfo(), soon = pi && pi.next && pi.rem <= 5;
+      g.font = `600 11px ${FONT}`;
+      if (soon) { g.fillStyle = '#30d158'; g.fillText(`Zo naar ${pi.next.spm} (${Math.ceil(pi.rem)})`, 17, 53); }
+      else { g.fillStyle = active ? col : '#7d8793'; g.fillText(st.text, 17, 53); }
 
-      // In de laatste 5 tellen van een blok: het volgende doel
-      const pi = progInfo();
-      if (pi && pi.next && pi.rem <= 5) {
-        x += g.measureText('/ ' + s.goal).width + 4;
-        g.fillStyle = '#30d158'; g.fillText('\u2192 ' + pi.next.spm, x, 33);
-      }
-
-      // Midden: het roeiertje, of even een korte melding (na een knop in het zwevende venster)
+      // Scheidingslijntjes en het roeiertje, of even een korte melding (na een knop in het zwevende venster)
+      g.fillStyle = '#262c34'; g.fillRect(124, 14, 1, 36); g.fillRect(290, 14, 1, 36);
       if (s.flash && performance.now() < s.flash.until) {
         g.font = `600 15px ${FONT}`; g.fillStyle = '#f2f4f6'; g.textAlign = 'center';
-        g.fillText(s.flash.text, 189, 30); g.textAlign = 'left';
-      } else drawRower(g, 104, 4, 170, 40, beatPhase());
+        g.fillText(s.flash.text, 207, 37); g.textAlign = 'left';
+      } else drawRower(g, 134, 6, 146, 52, beatPhase());
 
       // Onderin: voortgang van het huidige blok
       if (pi) {
-        g.fillStyle = '#23292f'; g.fillRect(0, BH - 2, BW, 2);
-        g.fillStyle = '#8a94a1'; g.fillRect(0, BH - 2, BW * pi.frac, 2);
+        g.fillStyle = '#23292f'; g.fillRect(0, BH - 3, BW, 3);
+        g.fillStyle = soon ? '#30d158' : '#8a94a1'; g.fillRect(0, BH - 3, BW * pi.frac, 3);
       }
 
-      // Rechts: afstand en tijd
+      // Rechts: afstand en tijd, met een schema daaronder het blok en de resterende tijd
       g.textAlign = 'right';
+      const ty = pi ? 33 : 38;
       const t = fmtTime(s.elapsed / 1000);
-      g.font = `500 12px ${FONT}`; g.fillStyle = '#8a94a1';
-      g.fillText(t, BW - 14, 31);
+      g.font = `500 13px ${FONT}`; g.fillStyle = '#8a94a1';
+      g.fillText(t, BW - 16, ty);
       const tw = g.measureText(t).width;
-      g.font = `650 15px ${FONT}`; g.fillStyle = '#f2f4f6';
-      g.fillText(meters().toLocaleString('nl-NL') + ' m', BW - 14 - tw - 8, 31);
+      g.font = `650 17px ${FONT}`; g.fillStyle = '#f2f4f6';
+      g.fillText(meters().toLocaleString('nl-NL') + ' m', BW - 16 - tw - 10, ty);
+      if (pi) {
+        g.font = `600 11px ${FONT}`; g.fillStyle = '#c9ced4';
+        g.fillText(`Blok ${pi.idx + 1}/${pi.n}, nog ${fmtTime(pi.rem)}`, BW - 16, 51);
+      }
       g.textAlign = 'left';
       g.setTransform(1, 0, 0, 1, 0, 0);
 
@@ -790,11 +816,44 @@ function drawRower(g, x, y, w, h, ph) {
     { id: 'fel', name: 'Kort en fel', note: '8 keer: 1 minuut op 28, 1 minuut op 20.', reps: 8, blocks: [{ sec: 60, spm: 28 }, { sec: 60, spm: 20 }] },
     { id: 'eigen', name: 'Eigen schema', note: 'Stel zelf de blokken samen.', reps: 1, blocks: [] }
   ];
-  let own = store.get('eigen', { reps: 3, blocks: [{ sec: 180, spm: 22 }, { sec: 60, spm: 26 }] });
+  let own = store.get('eigen', { parts: [{ reps: 3, blocks: [{ sec: 180, spm: 22 }, { sec: 60, spm: 26 }] }] });
+  if (!own.parts) own = { parts: [{ reps: own.reps || 1, blocks: own.blocks || [] }] };   // oude opslag
+  const saveOwn = () => store.set('eigen', own);
   let picked = store.get('schema', 'vrij');
 
-  const expand = pr => { const out = []; for (let r = 0; r < pr.reps; r++) pr.blocks.forEach(b => out.push({ sec: b.sec, spm: b.spm })); return out; };
-  const presetById = id => id === 'eigen' ? { ...PRESETS[4], reps: own.reps, blocks: own.blocks } : PRESETS.find(p => p.id === id) || PRESETS[0];
+  const partsOf = pr => pr.parts || [{ reps: pr.reps, blocks: pr.blocks }];
+  const expand = pr => { const out = []; partsOf(pr).forEach(pt => { for (let r = 0; r < pt.reps; r++) pt.blocks.forEach(b => out.push({ sec: b.sec, spm: b.spm })); }); return out; };
+  const presetById = id => id === 'eigen' ? { ...PRESETS[4], parts: own.parts } : PRESETS.find(p => p.id === id) || PRESETS[0];
+
+  // Schema als tekst: elke regel een deel, bv. "5 min op 20" of "5 keer: 4 min op 22, 1 min op 26"
+  function parseSchema(text) {
+    const parts = [], bad = [];
+    text.split(/\n/).forEach((raw, li) => {
+      let line = raw.replace(/^\s*(?:[-*\u2022]|\d+[.)])\s+/, '').trim().toLowerCase();   // opsommingstekens weg
+      if (!line) return;
+      let reps = 1;
+      const rm = line.match(/^(\d+)\s*(?:x|\u00d7|keer|maal)\s*:?\s*/);
+      if (rm) { reps = +rm[1]; line = line.slice(rm[0].length); }
+      line = line.replace(/^\(|\)$/g, '');
+      const blocks = [];
+      let ok = true;
+      line.split(/,|;|\/|\+|\ben\b|\bthen\b|\bdaarna\b/).map(x => x.trim()).filter(Boolean).forEach(item => {
+        let sec = null, rest = item, m;
+        if ((m = rest.match(/(\d+):(\d{2})/))) sec = +m[1] * 60 + +m[2];
+        else if ((m = rest.match(/(\d+(?:[.,]\d+)?)\s*(minuten|minuut|min|m(?![a-z])|')/))) { const v = parseFloat(m[1].replace(',', '.')); if (m[2] === 'm' && v >= 100) { ok = false; return; } sec = Math.round(v * 60); }
+        else if ((m = rest.match(/(\d+)\s*(seconden|sec|s(?![a-z])|")/))) sec = +m[1];
+        if (m) rest = rest.replace(m[0], ' ');
+        const sm = rest.match(/(?:^|\D)(\d{2})(?!\d)/);
+        const spm = sm ? +sm[1] : null;
+        if (!sec || !spm || spm < GOAL_MIN || spm > GOAL_MAX || sec > 3600) { ok = false; return; }
+        blocks.push({ sec, spm });
+      });
+      if (!ok || !blocks.length || reps < 1 || reps > 30) bad.push({ n: li + 1, line: raw.trim() });
+      else parts.push({ reps, blocks });
+    });
+    return { parts, bad };
+  }
+  const describePart = pt => (pt.reps > 1 ? `${pt.reps} keer: ` : '') + pt.blocks.map(b => `${fmtTime(b.sec)} min op ${b.spm}`).join(', ');
   const totalSec = steps => steps.reduce((a, b) => a + b.sec, 0);
 
   function progInfo() {
@@ -826,10 +885,11 @@ function drawRower(g, x, y, w, h, ph) {
   function startProg(id) {
     const pr = presetById(id);
     picked = id; store.set('schema', id);
-    if (id === 'vrij' || !pr.blocks.length) { s.prog = null; render(); return; }
-    s.prog = { name: pr.name, steps: expand(pr), start: s.elapsed, idx: 0 };
+    const steps = expand(pr);
+    if (id === 'vrij' || !steps.length) { s.prog = null; render(); return; }
+    s.prog = { id, name: pr.name, steps, start: s.elapsed, idx: 0 };
     setGoal(s.prog.steps[0].spm, true);
-    hint(`Schema ${pr.name} gestart: ${s.prog.steps.length} blokken, samen ${fmtTime(totalSec(s.prog.steps))} roeien.`);
+    hint(`${id === 'eigen' ? 'Je eigen schema' : 'Schema ' + pr.name} is gestart: ${s.prog.steps.length} blokken, samen ${fmtTime(totalSec(s.prog.steps))} roeien.`);
   }
 
   // ---------- Overzicht en eerdere trainingen ----------
@@ -851,37 +911,64 @@ function drawRower(g, x, y, w, h, ph) {
 
   // ---------- Paneel ----------
   const sheet = document.getElementById('sheet'), panel = document.getElementById('panel');
-  let view = null, lastSum = null;
+  let view = null, lastSum = null, pasteText = '';
   function openSheet(v) { view = v; sheet.hidden = false; drawSheet(); }
   function closeSheet() { sheet.hidden = true; view = null; }
   sheet.addEventListener('click', e => { if (e.target === sheet) closeSheet(); });
 
   function drawSheet() {
     if (view === 'training') {
-      const running = s.prog ? `<p>Nu bezig: <b>${s.prog.name}</b>, blok ${Math.min(s.prog.idx + 1, s.prog.steps.length)} van ${s.prog.steps.length}.</p>` : '';
+      const running = s.prog ? `<div class="row"><p>Nu bezig: <b>${s.prog.name}</b>, blok ${Math.min(s.prog.idx + 1, s.prog.steps.length)} van ${s.prog.steps.length}.</p><button type="button" class="btn small" data-act="progstop">Stoppen</button></div>` : '';
+      const stepper = (pi, i, f, d, label, val, unit) => `<span class="mini"><button type="button" data-act="ed" data-p="${pi}" data-i="${i}" data-f="${f}" data-d="${-d}" aria-label="${label[0]}">&minus;</button><span class="v">${val}<small>${unit}</small></span><button type="button" data-act="ed" data-p="${pi}" data-i="${i}" data-f="${f}" data-d="${d}" aria-label="${label[1]}">+</button></span>`;
+      const nBlocks = own.parts.reduce((a, pt) => a + pt.blocks.length, 0);
       const editor = picked === 'eigen' ? `<div class="ed">
-          ${own.blocks.map((b, i) => `<div class="blk"><span class="n">Blok ${i + 1}</span>
-            <span class="mini"><button type="button" data-act="ed" data-i="${i}" data-f="sec" data-d="-30" aria-label="Korter">&minus;</button><span class="v">${fmtTime(b.sec)} min</span><button type="button" data-act="ed" data-i="${i}" data-f="sec" data-d="30" aria-label="Langer">+</button></span>
-            <span class="mini"><button type="button" data-act="ed" data-i="${i}" data-f="spm" data-d="-1" aria-label="Lager tempo">&minus;</button><span class="v">${b.spm} slagen</span><button type="button" data-act="ed" data-i="${i}" data-f="spm" data-d="1" aria-label="Hoger tempo">+</button></span>
-            ${own.blocks.length > 1 ? `<button type="button" class="del" data-act="eddel" data-i="${i}">Weghalen</button>` : ''}</div>`).join('')}
-          <div class="blk"><button type="button" class="btn" data-act="edadd">Blok toevoegen</button>
-            <span class="mini" style="margin-left:auto"><span class="n" style="width:auto">Herhalen</span><button type="button" data-act="edreps" data-d="-1" aria-label="Minder keer">&minus;</button><span class="v">${own.reps} keer</span><button type="button" data-act="edreps" data-d="1" aria-label="Meer keer">+</button></span></div>
-          <p>Samen ${fmtTime(totalSec(expand(presetById('eigen'))))} roeien.</p>
+          ${own.parts.map((pt, pi) => `<div class="part">
+            ${pt.blocks.map((b, i) => `<div class="blk"><div class="head"><span>Blok ${i + 1}</span>${nBlocks > 1 ? `<button type="button" class="del" data-act="eddel" data-p="${pi}" data-i="${i}">Weghalen</button>` : ''}</div>
+              ${stepper(pi, i, 'sec', 30, ['Korter', 'Langer'], fmtTime(b.sec), 'minuten')}
+              ${stepper(pi, i, 'spm', 1, ['Lager tempo', 'Hoger tempo'], b.spm, 'slagen per minuut')}</div>`).join('')}
+            <div class="partfoot"><button type="button" class="btn small" data-act="edadd" data-p="${pi}">Blok toevoegen</button>
+              <span class="mini"><button type="button" data-act="edreps" data-p="${pi}" data-d="-1" aria-label="Minder keer">&minus;</button><span class="v">${pt.reps} keer</span><button type="button" data-act="edreps" data-p="${pi}" data-d="1" aria-label="Meer keer">+</button></span></div>
+          </div>`).join('')}
+          <div class="btns"><button type="button" class="btn small" data-act="edpart">Deel toevoegen</button><button type="button" class="btn small" data-act="paste">Schema plakken</button></div>
+          <p>Elk deel roei je het aantal keer dat erbij staat, daarna begint het volgende deel. Zo kun je bijvoorbeeld inroeien, dan herhalen en daarna uitroeien. Samen ${fmtTime(totalSec(expand(presetById('eigen'))))} roeien.</p>
         </div>` : '';
+      const again = s.prog && s.prog.id === picked;
       panel.innerHTML = `<h2>Training</h2>${running}
         <div class="sec"><div class="lbl">Schema</div>
           ${PRESETS.map(p => `<button type="button" class="choice" data-act="pick" data-id="${p.id}" aria-pressed="${picked === p.id}"><b>${p.name}</b><span>${p.note}</span></button>`).join('')}
           ${editor}
         </div>
-        <div class="btns">
-          <button type="button" class="btn primary" data-act="progstart">${picked === 'vrij' ? 'Vrij roeien' : 'Schema starten'}</button>
-          ${s.prog ? '<button type="button" class="btn" data-act="progstop">Schema stoppen</button>' : ''}
-        </div>
         <div class="sec"><div class="lbl">Afronden</div>
-          <p>Rond je de training af, dan zie je een overzicht en wordt de training bewaard op deze iPad. Afstand en tijd gaan daarna weer op nul.</p>
+          <p>Rond je de training af, dan zie je een overzicht en wordt de training bewaard op dit apparaat. Afstand en tijd gaan daarna weer op nul.</p>
           <div class="btns"><button type="button" class="btn" data-act="finish">Training afronden</button><button type="button" class="btn" data-act="hist">Eerdere trainingen</button></div>
         </div>
-        <button type="button" class="btn wide" data-act="sheetclose">Sluiten</button>`;
+        <div class="btns foot">
+          <button type="button" class="btn primary" data-act="progstart">${picked === 'vrij' ? 'Vrij roeien' : again ? 'Opnieuw beginnen' : 'Schema starten'}</button>
+          <button type="button" class="btn" data-act="sheetclose">Sluiten</button>
+        </div>`;
+    } else if (view === 'paste') {
+      const r = parseSchema(pasteText);
+      const readout = pasteText.trim() ? `<div class="readout">${r.parts.map(pt => `<div>${describePart(pt)}</div>`).join('')}
+          ${r.bad.map(b => `<div class="bad">Regel ${b.n} begrijp ik niet: ${b.line.replace(/</g, '&lt;')}</div>`).join('')}
+          ${r.parts.length ? `<div>Samen ${fmtTime(totalSec(expand({ parts: r.parts })))} roeien.</div>` : ''}</div>` : '';
+      panel.innerHTML = `<h2>Schema plakken</h2>
+        <p>Zet elk deel op een eigen regel, met de tijd en het tempo in slagen per minuut. Wil je een deel een paar keer herhalen, zet dan het aantal keer ervoor. Bijvoorbeeld:</p>
+        <pre>5 min op 20
+5 keer: 4 min op 22, 1 min op 26
+5 min op 18</pre>
+        <p>Laat je een schema maken, vraag dan om het in deze vorm. Afstanden (zoals 500 m) werken nog niet, alleen tijden.</p>
+        <textarea id="pasteBox" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Plak of typ hier je schema">${pasteText.replace(/</g, '&lt;')}</textarea>
+        <div class="sec"><div class="lbl">Zo lees ik het</div><div id="readout">${readout || '<p>Nog niets ingevuld.</p>'}</div></div>
+        <div class="btns foot">
+          <button type="button" class="btn primary" data-act="pastesave">Bewaren als eigen schema</button>
+          <button type="button" class="btn" data-act="training">Terug</button>
+        </div>`;
+      const box = document.getElementById('pasteBox');
+      box.addEventListener('input', () => {
+        pasteText = box.value;
+        const rr = parseSchema(pasteText), ro = document.getElementById('readout');
+        ro.innerHTML = pasteText.trim() ? `<div class="readout">${rr.parts.map(pt => `<div>${describePart(pt)}</div>`).join('')}${rr.bad.map(b => `<div class="bad">Regel ${b.n} begrijp ik niet: ${b.line.replace(/</g, '&lt;')}</div>`).join('')}${rr.parts.length ? `<div>Samen ${fmtTime(totalSec(expand({ parts: rr.parts })))} roeien.</div>` : ''}</div>` : '<p>Nog niets ingevuld.</p>';
+      });
     } else if (view === 'summary') {
       const t = lastSum;
       panel.innerHTML = `<h2>Training afgerond</h2><p>${fmtDate(t.date)}${t.schema ? ', ' + t.schema : ''}</p>
@@ -899,7 +986,7 @@ function drawRower(g, x, y, w, h, ph) {
       panel.innerHTML = `<h2>Eerdere trainingen</h2>
         ${h.length ? `<div class="hist">${h.map(t => `<div><b>${nlNum(t.meters)} m in ${fmtTime(t.sec)}</b><span class="d">${fmtDate(t.date)}, gemiddeld ${nlNum(t.spm, 1)} slagen, ${t.onTarget}% op tempo${t.schema ? ', ' + t.schema : ''}</span></div>`).join('')}</div>`
           : '<p>Je hebt nog geen trainingen afgerond. Rond een training af via Training, dan staat hij hier.</p>'}
-        <p>Deze lijst staat alleen op deze iPad, in deze browser.</p>
+        <p>Deze lijst staat alleen op dit apparaat, in deze browser.</p>
         <div class="btns"><button type="button" class="btn" data-act="training">Terug</button><button type="button" class="btn primary" data-act="sheetclose">Sluiten</button></div>`;
     }
   }
@@ -924,11 +1011,12 @@ function drawRower(g, x, y, w, h, ph) {
   }
 
   function editOwn(b) {
-    const i = +b.dataset.i, d = +b.dataset.d, f = b.dataset.f, bl = own.blocks[i];
+    const d = +b.dataset.d, f = b.dataset.f, bl = own.parts[+b.dataset.p].blocks[+b.dataset.i];
     if (f === 'sec') bl.sec = Math.max(30, Math.min(3600, bl.sec + d));
     else bl.spm = Math.max(GOAL_MIN, Math.min(GOAL_MAX, bl.spm + d));
-    store.set('eigen', own); drawSheet();
+    saveOwn();
   }
+  function keepScroll(fn) { const y = panel.scrollTop; fn(); drawSheet(); panel.scrollTop = y; }
 
   // ---------- Knoppen ----------
   const actions = {
@@ -941,15 +1029,22 @@ function drawRower(g, x, y, w, h, ph) {
     pipclose: () => pip.close(),
     training: () => openSheet('training'),
     sheetclose: closeSheet,
-    pick: b => { picked = b.dataset.id; drawSheet(); },
+    pick: b => keepScroll(() => { picked = b.dataset.id; }),
     progstart: () => { startProg(picked); closeSheet(); },
     progstop: () => { s.prog = null; hint('Schema gestopt. Je roeit nu vrij verder.'); closeSheet(); render(); },
     finish,
     hist: () => openSheet('hist'),
-    ed: editOwn,
-    eddel: b => { own.blocks.splice(+b.dataset.i, 1); store.set('eigen', own); drawSheet(); },
-    edadd: () => { const l = own.blocks[own.blocks.length - 1] || { sec: 120, spm: 22 }; own.blocks.push({ sec: l.sec, spm: l.spm }); store.set('eigen', own); drawSheet(); },
-    edreps: b => { own.reps = Math.max(1, Math.min(20, own.reps + +b.dataset.d)); store.set('eigen', own); drawSheet(); },
+    ed: b => keepScroll(() => editOwn(b)),
+    eddel: b => keepScroll(() => { const pt = own.parts[+b.dataset.p]; pt.blocks.splice(+b.dataset.i, 1); if (!pt.blocks.length) own.parts.splice(+b.dataset.p, 1); saveOwn(); }),
+    edadd: b => keepScroll(() => { const pt = own.parts[+b.dataset.p], l = pt.blocks[pt.blocks.length - 1] || { sec: 120, spm: 22 }; pt.blocks.push({ sec: l.sec, spm: l.spm }); saveOwn(); }),
+    edreps: b => keepScroll(() => { const pt = own.parts[+b.dataset.p]; pt.reps = Math.max(1, Math.min(30, pt.reps + +b.dataset.d)); saveOwn(); }),
+    edpart: () => keepScroll(() => { own.parts.push({ reps: 1, blocks: [{ sec: 300, spm: 20 }] }); saveOwn(); }),
+    paste: () => { pasteText = own.parts.map(describePart).join('\n'); openSheet('paste'); },
+    pastesave: () => {
+      const r = parseSchema(pasteText);
+      if (r.bad.length || !r.parts.length) { hint(r.parts.length ? 'Pas eerst de regels aan die ik niet begrijp.' : 'Er staat nog geen schema in.'); return; }
+      own = { parts: r.parts }; saveOwn(); picked = 'eigen'; store.set('schema', 'eigen'); openSheet('training');
+    },
     conn: () => { if (wantConnected) { if (confirm('Verbinding met de roeier verbreken?')) disconnect(); } else connect(); }
   };
   document.addEventListener('click', e => {
