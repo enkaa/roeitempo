@@ -76,8 +76,7 @@
   .big .of { font-size: .32em; font-weight: 600; color: var(--soft); }
   .cue { font-size: clamp(14px, 2.8vmin, 22px); font-weight: 600; color: var(--state); transition: color .4s; }
 
-  .t-ritme { grid-area: ritme; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 6px; min-height: 90px; }
-  .ratio { font-size: clamp(13px, 2.2vmin, 17px); color: var(--muted); min-height: 1.3em; }
+  .t-ritme { grid-area: ritme; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 6px; min-height: 90px; }
   .t-ritme canvas { width: 100%; height: 100%; display: block; }
 
   .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -220,7 +219,6 @@
   <section class="tile t-ritme">
     <div class="lbl">Ritme</div>
     <canvas id="ritme" aria-label="Roeiertje dat de slag voordoet op het doeltempo"></canvas>
-    <div class="ratio" data-v="ratio"></div>
   </section>
 
   <section class="tile t-doel">
@@ -319,7 +317,6 @@
     setText('dist', meters().toLocaleString('nl-NL'));
     setText('time', fmtTime(s.elapsed / 1000));
     setText('pace', active && s.pace > 0 && s.pace < 600 ? fmtTime(s.pace) : '-:--');
-    setText('ratio', ratioText(active));
     const pi = progInfo();
     setText('prog', pi ? `Blok ${pi.idx + 1} van ${pi.n}, nog ${fmtTime(pi.rem)}.` + (pi.next ? ` Daarna tempo ${pi.next.spm}.` : ' Dit is het laatste blok.') : '');
     drawSegs(pi);
@@ -328,18 +325,6 @@
     const fb = document.querySelector('.top [data-act="finish"]');
     if (fb.hidden === canFinish) { fb.hidden = !canFinish; $('resetBtn').hidden = canFinish; }
     pip.draw(st, active);
-  }
-
-  // Terugkomen ten opzichte van de haal, over hetzelfde middenstuk (gemiddelde van de laatste 3 slagen)
-  function ratioAvg(active) {
-    if (!active || !s.ratios || !s.ratios.length || performance.now() - s.ratioAt > 15000) return 0;
-    return s.ratios.reduce((a, b) => a + b, 0) / s.ratios.length;
-  }
-  function ratioText(active) {
-    const r = ratioAvg(active);
-    if (!r) return '';
-    const tip = r < 1.4 ? 'Kom rustiger terug.' : r > 2.6 ? 'Je mag iets vlotter terugkomen.' : 'Mooi ritme.';
-    return `Terugkomen duurt ${nlNum(r, 1)} keer zo lang als de haal. ${tip}`;
   }
 
   // Kleur per blok: rustig = blauw, zwaar = paars (los van groen/oranje/rood, die over je tempo gaan)
@@ -584,8 +569,6 @@ function drawRower(g, x, y, w, h, ph) {
   }
   function onExtMetrics(e) {
     const v = e.target.value;
-    const drive = v.getUint16(2, true) / 4096, back = v.getUint16(4, true) / 4096;
-    if (drive > 0 && back > 0) { s.ratios = [...(s.ratios || []).slice(-2), back / drive]; s.ratioAt = performance.now(); }
     if (!rec.on) return;   // vermogen (W), haal- en terugslagduur (1/4096 s), dragfactor
     rec.ext.push([recT(), v.getInt16(0, true), +(v.getUint16(2, true) / 4096).toFixed(3), +(v.getUint16(4, true) / 4096).toFixed(3), v.getUint16(6, true)]);
     recShow();
@@ -810,13 +793,7 @@ function drawRower(g, x, y, w, h, ph) {
         g.font = `600 15px ${FONT}`; g.fillStyle = '#f2f4f6'; g.textAlign = 'center';
         g.fillText(s.flash.text, 207, 37); g.textAlign = 'left';
       } else {
-        // Komt je terug te snel, dan iets kleiner roeiertje met daaronder "Rustiger terug" (het roeiertje blijft staan)
-        const r = ratioAvg(active);
-        if (r && r < 1.4) {
-          drawRower(g, 140, 3, 134, 42, beatPhase());
-          g.font = `600 11px ${FONT}`; g.fillStyle = '#ff9f0a'; g.textAlign = 'center';
-          g.fillText('Rustiger terug', 207, 57); g.textAlign = 'left';
-        } else drawRower(g, 134, 6, 146, 52, beatPhase());
+        drawRower(g, 134, 6, 146, 52, beatPhase());
       }
 
       // Onderin: de hele training in gekleurde stukken (per blok), gedeeld = al geroeid
