@@ -331,9 +331,13 @@
   }
 
   // Terugkomen ten opzichte van de haal, over hetzelfde middenstuk (gemiddelde van de laatste 3 slagen)
+  function ratioAvg(active) {
+    if (!active || !s.ratios || !s.ratios.length || performance.now() - s.ratioAt > 15000) return 0;
+    return s.ratios.reduce((a, b) => a + b, 0) / s.ratios.length;
+  }
   function ratioText(active) {
-    if (!active || !s.ratios || !s.ratios.length || performance.now() - s.ratioAt > 15000) return '';
-    const r = s.ratios.reduce((a, b) => a + b, 0) / s.ratios.length;
+    const r = ratioAvg(active);
+    if (!r) return '';
     const tip = r < 1.4 ? 'Kom rustiger terug.' : r > 2.6 ? 'Je mag iets vlotter terugkomen.' : 'Mooi ritme.';
     return `Terugkomen duurt ${nlNum(r, 1)} keer zo lang als de haal. ${tip}`;
   }
@@ -805,7 +809,15 @@ function drawRower(g, x, y, w, h, ph) {
       if (s.flash && performance.now() < s.flash.until) {
         g.font = `600 15px ${FONT}`; g.fillStyle = '#f2f4f6'; g.textAlign = 'center';
         g.fillText(s.flash.text, 207, 37); g.textAlign = 'left';
-      } else drawRower(g, 134, 6, 146, 52, beatPhase());
+      } else {
+        // Komt je terug te snel, dan iets kleiner roeiertje met daaronder "Rustiger terug" (het roeiertje blijft staan)
+        const r = ratioAvg(active);
+        if (r && r < 1.4) {
+          drawRower(g, 140, 3, 134, 42, beatPhase());
+          g.font = `600 11px ${FONT}`; g.fillStyle = '#ff9f0a'; g.textAlign = 'center';
+          g.fillText('Rustiger terug', 207, 57); g.textAlign = 'left';
+        } else drawRower(g, 134, 6, 146, 52, beatPhase());
+      }
 
       // Onderin: de hele training in gekleurde stukken (per blok), gedeeld = al geroeid
       if (pi) {
