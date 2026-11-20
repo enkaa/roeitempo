@@ -544,6 +544,26 @@ function drawRower(g, x, y, w, h, ph) {
   let device = null, wantConnected = false, retryTimer = null;
   const rec = { on: false, hasExt: false, t0: 0, start: null, rows: [], ext: [], dt: [], dtAt: [] };
   const recT = () => Math.round(performance.now() - rec.t0);
+  // Vaste functies: addEventListener voegt dezelfde functie niet twee keer toe (bij opnieuw verbinden). Bluefy kent oncharacteristicvaluechanged niet.
+  function onRowerData(e) {
+    if (s.source !== 'ble') return;
+    const d = parseRowerData(e.target.value);
+    if (rec.on) rec.rows.push([recT(), d.spm, d.strokes, d.distance, d.pace]);
+    onData(d);
+  }
+  function onDeltaTimes(e) {
+    if (!rec.on) return;
+    const v = e.target.value;
+    for (let i = 0; i + 4 <= v.byteLength; i += 4) rec.dt.push(v.getUint32(i, true));   // microseconden per impuls
+    rec.dtAt.push([recT(), rec.dt.length]);
+    recShow();
+  }
+  function onExtMetrics(e) {
+    if (!rec.on) return;
+    const v = e.target.value;   // vermogen (W), haal- en terugslagduur (1/4096 s), dragfactor
+    rec.ext.push([recT(), v.getInt16(0, true), +(v.getUint16(2, true) / 4096).toFixed(3), +(v.getUint16(4, true) / 4096).toFixed(3), v.getUint16(6, true)]);
+    recShow();
+  }
   function recShow() { const el = document.getElementById('recN'); if (el) el.textContent = `${nlNum(rec.dt.length)} metingen, ${nlNum(rec.ext.length)} ${rec.ext.length === 1 ? 'slag' : 'slagen'}`; }
 
   function parseRowerData(dv) {
@@ -572,32 +592,16 @@ function drawRower(g, x, y, w, h, ph) {
     const server = await device.gatt.connect();
     const svc = await server.getPrimaryService(FTMS);
     const ch = await svc.getCharacteristic(ROWER_DATA);
-    ch.oncharacteristicvaluechanged = e => {
-      if (s.source !== 'ble') return;
-      const d = parseRowerData(e.target.value);
-      if (rec.on) rec.rows.push([recT(), d.spm, d.strokes, d.distance, d.pace]);
-      onData(d);
-    };
+    ch.addEventListener('characteristicvaluechanged', onRowerData);
     await ch.startNotifications();
     rec.hasExt = false;
     try {
       const ext = await server.getPrimaryService(EXT_SVC);
       const dch = await ext.getCharacteristic(DELTA_TIMES);
-      dch.oncharacteristicvaluechanged = e => {
-        if (!rec.on) return;
-        const v = e.target.value;
-        for (let i = 0; i + 4 <= v.byteLength; i += 4) rec.dt.push(v.getUint32(i, true));   // microseconden per omwenteling
-        rec.dtAt.push([recT(), rec.dt.length]);
-        recShow();
-      };
+      dch.addEventListener('characteristicvaluechanged', onDeltaTimes);
       await dch.startNotifications();
       const mch = await ext.getCharacteristic(EXT_METRICS);
-      mch.oncharacteristicvaluechanged = e => {
-        if (!rec.on) return;
-        const v = e.target.value;   // vermogen (W), haal- en terugslagduur (1/4096 s), dragfactor
-        rec.ext.push([recT(), v.getInt16(0, true), +(v.getUint16(2, true) / 4096).toFixed(3), +(v.getUint16(4, true) / 4096).toFixed(3), v.getUint16(6, true)]);
-        recShow();
-      };
+      mch.addEventListener('characteristicvaluechanged', onExtMetrics);
       await mch.startNotifications();
       rec.hasExt = true;
     } catch (e) { /* oudere koppeling zonder toestemming voor deze gegevens: dan geen opname */ }
